@@ -121,14 +121,16 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         if r.playable:
             playable_robots.append(name)
 
-    logger.info("Obtained episodes from scenario maker. Now initializing agents com.")
+    logger.info("Obtained episodes from scenario maker. Now initializing agents com.",
+                playable_robots=playable_robots)
     agents_cis: Dict[str, ComponentInterface] = {}
     for robot_name in playable_robots:
         fifo_in = os.path.join(config.fifo_dir, robot_name + "-in")
         fifo_out = os.path.join(config.fifo_dir, robot_name + "-out")
 
         # first open all fifos
-        logger.info(f"Initializing agent {robot_name} - {fifo_in} / {fifo_out}")
+        logger.info(f"Initializing agent", robot_name=robot_name, fifo_in=fifo_in,
+                    fifo_out=fifo_out)
         aci = ComponentInterface(
             fifo_in,
             fifo_out,
@@ -138,7 +140,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         )
         agents_cis[robot_name] = aci
 
-    logger.info(f"Now initializing sim connection {config.sim_in} / {config.sim_out}")
+    logger.info(f"Now initializing sim connection", sim_in=config.sim_in, sim_out=config.sim_out)
 
     sim_ci = ComponentInterface(
         config.sim_in,
@@ -223,7 +225,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
 
             except:
                 msg = "Anomalous error from run_episode()"
-                logger.error(msg, e= traceback.format_exc())
+                logger.error(msg, e=traceback.format_exc())
                 raise
             finally:
                 fw.close()
@@ -237,8 +239,6 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                     make_video_ui_image(log_filename=fn, output_video=os.path.join(dn, "ui_image.mp4"))
 
                 for pc_name in playable_robots:
-                    # with notice_thread("evaluation", 3):
-                    #     evaluated = evaluate_stats(fn, pc_name)
 
                     dn_i = os.path.join(dn, pc_name)
                     with notice_thread("Visualization", 2):
@@ -470,7 +470,8 @@ async def run_episode(
 
                     if sim_state.done:
                         if True:
-                            msg = f"Breaking because of simulator ({sim_state.done_code} - {sim_state.done_why}"
+                            msg = f"Breaking because of simulator ({sim_state.done_code} - " \
+                                  f"{sim_state.done_why}"
                             logger.info(msg)
                             break
                         # else:
