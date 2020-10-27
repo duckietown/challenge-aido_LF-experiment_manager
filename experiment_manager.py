@@ -448,7 +448,7 @@ async def run_episode(
                                 state=state_dump.data.state,
                                 map_data=map_data,
                             )
-                            logger.info("sending agent", obs_plus=obs_plus)
+                            # logger.info("sending agent", obs_plus=obs_plus)
                             agent_ci.write_topic_and_expect_zero("observations", obs_plus)
                             get_commands = GetCommands(t_effective)
                             f = functools.partial(
