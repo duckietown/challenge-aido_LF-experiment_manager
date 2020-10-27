@@ -13,7 +13,15 @@ repo=$(shell echo $(repo0) | tr A-Z a-z)
 branch=$(shell git rev-parse --abbrev-ref HEAD)
 tag=$(AIDO_REGISTRY)/duckietown/$(repo):$(branch)
 
+
+bump: # v2
+	bumpversion patch
+	git push --tags
+	git push
+
 build: update-reqs
+	aido-check-not-dirty
+	aido-check-tagged
 	docker build --pull -t $(tag) $(build_options) .
 
 push: build

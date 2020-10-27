@@ -26,12 +26,15 @@ from zuper_typing import can_be_used_as2
 from aido_analyze.utils_drawing import read_and_draw
 from aido_analyze.utils_video import make_video1, make_video_ui_image
 from aido_schemas import (
-    DB20Observations, DB20ObservationsPlusState, DTSimStateDump,
+    DB20Observations,
+    DB20ObservationsPlusState,
+    DTSimStateDump,
     EpisodeStart,
     GetCommands,
     GetRobotObservations,
     GetRobotState,
-    JPGImage, protocol_agent_DB20,
+    JPGImage,
+    protocol_agent_DB20,
     protocol_scenario_maker,
     protocol_simulator_DB20,
     RobotObservations,
@@ -53,6 +56,9 @@ from duckietown_world.rules.rule import EvaluatedMetric
 from webserver import WebServer
 
 logger = ZLogger(__name__)
+__version__ = "6.0.0"
+
+logger.info(f"{__version__}")
 
 
 @dataclass
@@ -120,16 +126,16 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         if r.playable:
             playable_robots.append(name)
 
-    logger.info("Obtained episodes from scenario maker. Now initializing agents com.",
-                playable_robots=playable_robots)
+    logger.info(
+        "Obtained episodes from scenario maker. Now initializing agents com.", playable_robots=playable_robots
+    )
     agents_cis: Dict[str, ComponentInterface] = {}
     for robot_name in playable_robots:
         fifo_in = os.path.join(config.fifo_dir, robot_name + "-in")
         fifo_out = os.path.join(config.fifo_dir, robot_name + "-out")
 
         # first open all fifos
-        logger.info(f"Initializing agent", robot_name=robot_name, fifo_in=fifo_in,
-                    fifo_out=fifo_out)
+        logger.info(f"Initializing agent", robot_name=robot_name, fifo_in=fifo_in, fifo_out=fifo_out)
         aci = ComponentInterface(
             fifo_in,
             fifo_out,
@@ -208,8 +214,11 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
 
             num_playable = len([_ for _ in episode_spec.scenario.robots.values() if _.playable])
             if num_playable != len(playable_robots):
-                msg = f"The scenario requires {num_playable} robots," f"but I only know " \
-                      f"{len(playable_robots)} agents"
+                msg = (
+                    f"The scenario requires {num_playable} robots,"
+                    f"but I only know "
+                    f"{len(playable_robots)} agents"
+                )
                 raise Exception(msg)  # XXX
             try:
                 logger.info(f"Starting episode {episode_name}")
@@ -250,7 +259,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                         make_video1(log_filename=fn, output_video=out_video, robot_name=pc_name)
 
                     if len(evaluated) == 0:
-                        msg = 'Empty evaluated'
+                        msg = "Empty evaluated"
                         raise ZValueError(msg)
 
                     stats = {}
@@ -386,8 +395,9 @@ async def run_episode(
             with tt.measure("complete-iteration"):
 
                 with tt.measure("get_state_dump"):
-                    f = functools.partial(sim_ci.write_topic_and_expect, "dump_state", DumpState(),
-                                          expect="state_dump")
+                    f = functools.partial(
+                        sim_ci.write_topic_and_expect, "dump_state", DumpState(), expect="state_dump"
+                    )
                     state_dump: MsgReceived[DTSimStateDump] = await loop.run_in_executor(executor, f)
 
                 for agent_name, agent_ci in agents_cis.items():
@@ -422,7 +432,8 @@ async def run_episode(
                             expect="robot_observations",
                         )
                         recv_observations: MsgReceived[RobotObservations] = await loop.run_in_executor(
-                            executor, f)
+                            executor, f
+                        )
                         ro: RobotObservations = recv_observations.data
                         obs = cast(DB20Observations, ro.observations)
                         await webserver.push(f"{agent_name}-camera", obs.camera.jpg_data)
@@ -431,7 +442,9 @@ async def run_episode(
                         try:
                             map_data = cast(str, scenario.environment)
                             obs_plus = DB20ObservationsPlusState(
-                                camera=obs.camera, odometry=obs.odometry, your_name=agent_name,
+                                camera=obs.camera,
+                                odometry=obs.odometry,
+                                your_name=agent_name,
                                 state=state_dump.data.state,
                                 map_data=map_data,
                             )
@@ -439,7 +452,9 @@ async def run_episode(
                             agent_ci.write_topic_and_expect_zero("observations", obs_plus)
                             get_commands = GetCommands(t_effective)
                             f = functools.partial(
-                                agent_ci.write_topic_and_expect, "get_commands", get_commands,
+                                agent_ci.write_topic_and_expect,
+                                "get_commands",
+                                get_commands,
                                 expect="commands",
                             )
                             r: MsgReceived = await loop.run_in_executor(executor, f)
@@ -449,7 +464,7 @@ async def run_episode(
                             raise dc.InvalidSubmission(msg) from e
 
                     with tt.measure("set_robot_commands"):
-                        set_robot_commands = SetRobotCommands(agent_name, t_effective, r.data, )
+                        set_robot_commands = SetRobotCommands(agent_name, t_effective, r.data,)
                         f = functools.partial(
                             sim_ci.write_topic_and_expect_zero, "set_robot_commands", set_robot_commands,
                         )
@@ -472,8 +487,10 @@ async def run_episode(
 
                     if sim_state.done:
                         if True:
-                            msg = f"Breaking because of simulator ({sim_state.done_code} - " \
-                                  f"{sim_state.done_why}"
+                            msg = (
+                                f"Breaking because of simulator ({sim_state.done_code} - "
+                                f"{sim_state.done_why}"
+                            )
                             logger.info(msg)
                             break
                         # else:
@@ -486,8 +503,9 @@ async def run_episode(
                     await loop.run_in_executor(executor, f)
 
                 with tt.measure("get_ui_image"):
-                    f = functools.partial(sim_ci.write_topic_and_expect, "get_ui_image", None,
-                                          expect="ui_image")
+                    f = functools.partial(
+                        sim_ci.write_topic_and_expect, "get_ui_image", None, expect="ui_image"
+                    )
                     r_ui_image: MsgReceived[JPGImage] = await loop.run_in_executor(executor, f)
 
             if True:
