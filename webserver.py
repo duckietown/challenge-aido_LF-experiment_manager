@@ -6,6 +6,8 @@ from aiohttp import MultipartWriter, web
 from aiohttp.abc import Request
 from multidict import CIMultiDict
 
+__all__ = ['WebServer']
+
 
 class WebServer:
     def __init__(self, address: str, port: int):
@@ -39,7 +41,7 @@ class WebServer:
         response = web.StreamResponse(
             status=200,
             reason="OK",
-            headers={"Content-Type": "multipart/x-mixed-replace;" "boundary=%s" % my_boundary,},
+            headers={"Content-Type": "multipart/x-mixed-replace;" "boundary=%s" % my_boundary, },
         )
         await response.prepare(request)
 

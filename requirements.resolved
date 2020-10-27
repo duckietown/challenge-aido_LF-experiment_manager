@@ -1,13 +1,13 @@
 
 # this is already in the base container but makes it easy to update quickly
-aido-protocols-daffy==6.0.3
-aido-analyze-daffy==6.0.1
-duckietown-world-daffy==6.0.4
-duckietown-challenges-daffy==6.0.20
+aido-protocols-daffy==6.0.13
+aido-analyze-daffy==6.0.3
+duckietown-world-daffy==6.0.11
+duckietown-challenges-daffy==6.1.5
 
-multidict==4.7.6
+multidict==5.0.0
 
-aiohttp==3.6.2
+aiohttp==3.7.2
 requests==2.24.0
 py-multihash==0.2.3
 py-cid==0.3.0

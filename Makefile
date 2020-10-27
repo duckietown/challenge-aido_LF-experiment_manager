@@ -13,11 +13,12 @@ repo=$(shell echo $(repo0) | tr A-Z a-z)
 branch=$(shell git rev-parse --abbrev-ref HEAD)
 tag=$(AIDO_REGISTRY)/duckietown/$(repo):$(branch)
 
-build:
+build: update-reqs
 	docker build --pull -t $(tag) $(build_options) .
-
-build-no-cache:
-	docker build --pull -t $(tag) $(build_options)  --no-cache .
 
 push: build
 	docker push $(tag)
+
+update-reqs:
+	pur --index-url $(PIP_INDEX_URL) -r requirements.txt -f -m '*' -o requirements.resolved
+	aido-update-reqs requirements.resolved

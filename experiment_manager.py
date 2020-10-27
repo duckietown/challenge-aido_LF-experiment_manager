@@ -15,28 +15,25 @@ from typing import Callable, cast, Dict, Iterator, List
 
 import numpy as np
 import yaml
-from webserver import WebServer
 from zuper_commons.logs import ZLogger
 from zuper_commons.types import ZException
 from zuper_ipce import ipce_from_object, object_from_ipce
 from zuper_nodes.structures import RemoteNodeAborted
-from zuper_nodes_wrapper.wrapper_outside import ComponentInterface, MsgReceived
+from zuper_nodes_wrapper.struct import MsgReceived
+from zuper_nodes_wrapper.wrapper_outside import ComponentInterface
 from zuper_typing import can_be_used_as2
 
 from aido_analyze.utils_drawing import read_and_draw
 from aido_analyze.utils_video import make_video1, make_video_ui_image
 from aido_schemas import (
-    DTSimStateDump,
-    Duckiebot1Observations,
-    Duckiebot1ObservationsPlusState,
+    DB20Observations, DB20ObservationsPlusState, DTSimStateDump,
     EpisodeStart,
     GetCommands,
     GetRobotObservations,
     GetRobotState,
-    JPGImage,
-    protocol_agent_duckiebot1,
+    JPGImage, protocol_agent_DB20,
     protocol_scenario_maker,
-    protocol_simulator,
+    protocol_simulator_DB20,
     RobotObservations,
     RobotPerformance,
     RobotState,
@@ -53,6 +50,7 @@ from duckietown_challenges import ChallengeInterfaceEvaluator
 from duckietown_world import construct_map, draw_static, DuckietownMap
 from duckietown_world.rules import RuleEvaluationResult
 from duckietown_world.rules.rule import EvaluatedMetric
+from webserver import WebServer
 
 logger = ZLogger(__name__)
 
@@ -94,6 +92,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         nickname="scenario_maker",
         timeout=config.timeout_regular,
     )
+    # noinspection PyProtectedMember
     sm_ci._get_node_protocol(timeout=config.timeout_initialization)
     episodes = get_episodes(sm_ci, episodes_per_scenario=config.episodes_per_scenario, seed=config.seed)
 
@@ -112,7 +111,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
 
             fns = draw_static(dm, output_dir=draw_maps_dir, pixel_size=(640, 640), area=None)
             for fn in fns:
-                logger.info("Written to %s" % fn)
+                logger.info(f"Written to {fn}")
             pass
 
     episode = episodes[0]
@@ -134,27 +133,29 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         aci = ComponentInterface(
             fifo_in,
             fifo_out,
-            expect_protocol=protocol_agent_duckiebot1,
+            expect_protocol=protocol_agent_DB20,
             nickname=robot_name,
             timeout=config.timeout_regular,
         )
         agents_cis[robot_name] = aci
 
-    logger.info(f"Now initializing sim connection", sim_in=config.sim_in, sim_out=config.sim_out)
+    logger.info("Now initializing sim connection", sim_in=config.sim_in, sim_out=config.sim_out)
 
     sim_ci = ComponentInterface(
         config.sim_in,
         config.sim_out,
-        expect_protocol=protocol_simulator,
+        expect_protocol=protocol_simulator_DB20,
         nickname="simulator",
         timeout=config.timeout_regular,
     )
 
     logger.info("Getting protocol for sim")
+    # noinspection PyProtectedMember
     sim_ci._get_node_protocol(timeout=config.timeout_initialization)
 
     for pcname, robot_ci in agents_cis.items():
         logger.info("Getting protocol for agent")
+        # noinspection PyProtectedMember
         robot_ci._get_node_protocol(timeout=config.timeout_initialization)
         if True:
             check_compatibility_between_agent_and_sim(robot_ci, sim_ci)
@@ -175,20 +176,20 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         while episodes:
 
             if nfailures >= config.max_failures:
-                msg = "Too many failures: %s" % nfailures
+                msg = f"Too many failures: {nfailures}"
                 raise Exception(msg)  # XXX
 
             episode_spec = episodes[0]
             episode_name = episode_spec.episode_name
 
-            logger.info("Starting episode %s" % episode_name)
+            logger.info(f"Starting episode {episode_name}")
 
             dn_final = os.path.join(log_dir, episode_name)
 
             if os.path.exists(dn_final):
                 shutil.rmtree(dn_final)
 
-            dn = os.path.join(attempts, episode_name + ".attempt%s" % attempt_i)
+            dn = os.path.join(attempts, episode_name + f".attempt{attempt_i}")
             if os.path.exists(dn):
                 shutil.rmtree(dn)
 
@@ -211,7 +212,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                       f"{len(playable_robots)} agents"
                 raise Exception(msg)  # XXX
             try:
-                logger.info("Starting episode %s" % episode_name)
+                logger.info(f"Starting episode {episode_name}")
                 length_s = await run_episode(
                     sim_ci,
                     agents_cis,
@@ -267,12 +268,12 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                     logger.info(episode_name=episode_name, pc_name=pc_name, stats=stats)
 
             if length_s >= config.min_episode_length_s:
-                logger.info("%1.f s are enough" % length_s)
+                logger.info(f"{length_s:1f} s are enough")
                 episodes.pop(0)
 
                 os.rename(dn, dn_final)
             else:
-                msg = "episode too short with %1.f s < %.1f s" % (length_s, config.min_episode_length_s,)
+                msg = f"episode too short with {length_s:1f} s < {config.min_episode_length_s:.1f} s"
                 logger.error(msg)
 
                 nfailures += 1
@@ -296,10 +297,10 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
     for k in list(stats):
         # logger.info(k=k, values=values)
         values = [_[k] for _ in per_episode.values()]
-        cie.set_score("%s_mean" % k, float(np.mean(values)))
-        cie.set_score("%s_median" % k, float(np.median(values)))
-        cie.set_score("%s_min" % k, float(np.min(values)))
-        cie.set_score("%s_max" % k, float(np.max(values)))
+        cie.set_score(f"{k}_mean", float(np.mean(values)))
+        cie.set_score(f"{k}_median", float(np.median(values)))
+        cie.set_score(f"{k}_min", float(np.min(values)))
+        cie.set_score(f"{k}_max", float(np.max(values)))
 
 
 @contextmanager
@@ -325,7 +326,7 @@ def notice_thread_child(msg: str, interval: float, stop_condition: Callable[[], 
     t0 = time.time()
     while not stop_condition():
         delta = time.time() - t0
-        logger.info(msg + "(running for %d seconds)" % delta)
+        logger.info(msg + f"(running for {int(delta)} seconds)")
         time.sleep(interval)
     # logger.info('notice_thread_child finishes')
 
@@ -376,7 +377,7 @@ async def run_episode(
     with ThreadPoolExecutor(max_workers=5) as executor:
         while True:
             if current_sim_time >= episode_length_s:
-                logger.info("Reached %1.f seconds. Finishing. " % episode_length_s)
+                logger.info(f"Reached {episode_length_s:1f} seconds. Finishing. ")
                 break
 
             tt = TimeTracker(steps)
@@ -423,14 +424,15 @@ async def run_episode(
                         recv_observations: MsgReceived[RobotObservations] = await loop.run_in_executor(
                             executor, f)
                         ro: RobotObservations = recv_observations.data
-                        obs = cast(Duckiebot1Observations, ro.observations)
+                        obs = cast(DB20Observations, ro.observations)
                         await webserver.push(f"{agent_name}-camera", obs.camera.jpg_data)
 
                     with tt.measure(f"agent_compute-{agent_name}"):
                         try:
                             map_data = cast(str, scenario.environment)
-                            obs_plus = Duckiebot1ObservationsPlusState(
-                                camera=obs.camera, your_name=agent_name, state=state_dump.data.state,
+                            obs_plus = DB20ObservationsPlusState(
+                                camera=obs.camera, odometry=obs.odometry, your_name=agent_name,
+                                state=state_dump.data.state,
                                 map_data=map_data,
                             )
 
@@ -499,8 +501,11 @@ async def run_episode(
 def log_timing_info(tt, sim_ci: ComponentInterface):
     ipce = ipce_from_object(tt)
     msg = {"compat": ["aido2"], "topic": "timing_information", "data": ipce}
+    # noinspection PyProtectedMember
     j = sim_ci._serialize(msg)
+    # noinspection PyProtectedMember
     sim_ci._cc.write(j)
+    # noinspection PyProtectedMember
     sim_ci._cc.flush()
 
 
@@ -569,13 +574,13 @@ def get_episodes(sm_ci: ComponentInterface, episodes_per_scenario: int, seed: in
 def env_as_yaml(name: str) -> dict:
     environment = os.environ.copy()
     if not name in environment:
-        msg = 'Could not find variable "%s"; I know:\n%s' % (name, json.dumps(environment, indent=4),)
+        msg = f'Could not find variable "{name}"; I know:\n{json.dumps(environment, indent=4)}'
         raise Exception(msg)
     v = environment[name]
     try:
         return yaml.load(v, Loader=yaml.SafeLoader)
     except Exception as e:
-        msg = "Could not load YAML: %s\n\n%s" % (e, v)
+        msg = f"Could not load YAML: {e}\n\n{v}"
         raise Exception(msg)
 
 
@@ -602,7 +607,7 @@ def wrap(cie: dc.ChallengeInterfaceEvaluator) -> None:
     cie.info("experiment_manager::wrap() terminated gracefully.")
 
 
-if __name__ == "__main__":
+def go():
     with dc.scoring_context() as cie:
         try:
             wrap(cie)
@@ -616,3 +621,7 @@ if __name__ == "__main__":
             cie.error(msg)
             time.sleep(10)
             raise
+
+
+if __name__ == "__main__":
+    go()
