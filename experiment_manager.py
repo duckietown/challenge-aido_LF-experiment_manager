@@ -55,10 +55,10 @@ from duckietown_world.rules import RuleEvaluationResult
 from duckietown_world.rules.rule import EvaluatedMetric
 from webserver import WebServer
 
-logger = ZLogger(__name__)
+logger = ZLogger("experiment_manager")
 __version__ = "6.0.2"
 
-logger.info(f"{__version__}")
+logger.info(f"experiment_manager {__version__}")
 
 
 @dataclass
