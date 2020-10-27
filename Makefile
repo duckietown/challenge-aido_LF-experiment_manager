@@ -10,7 +10,8 @@ build_options=\
 
 
 repo=challenge-aido_lf-experiment_manager
-# repo=$(shell basename -s .git `git config --get remote.origin.url`)
+repo0=$(shell basename -s .git `git config --get remote.origin.url`)
+repo=$(shell echo $(repo0) | tr A-Z a-z)
 branch=$(shell git rev-parse --abbrev-ref HEAD)
 tag=$(AIDO_REGISTRY)/duckietown/$(repo):$(branch)
 
