@@ -1,6 +1,6 @@
 
 # this is already in the base container but makes it easy to update quickly
-aido-protocols-daffy==6.0.13
+aido-protocols-daffy==6.0.14
 aido-analyze-daffy==6.0.3
 duckietown-world-daffy==6.0.11
 duckietown-challenges-daffy==6.1.5
