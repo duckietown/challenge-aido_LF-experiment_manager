@@ -1,8 +1,8 @@
 
-multidict
+multidict==5.0.0
 
-aiohttp
-requests
-py-multihash
-py-cid
-pytz
+aiohttp==3.6.2
+requests==2.24.0
+py-multihash==0.2.3
+py-cid==0.3.0
+pytz==2020.1
