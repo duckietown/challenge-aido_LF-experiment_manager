@@ -1,0 +1,8 @@
+
+multidict
+
+aiohttp
+requests
+py-multihash
+py-cid
+pytz
