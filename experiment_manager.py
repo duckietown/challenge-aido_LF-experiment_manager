@@ -618,6 +618,8 @@ def wrap(cie: dc.ChallengeInterfaceEvaluator) -> None:
     try:
         asyncio.run(main(cie, logdir, attempts), debug=True)
         cie.set_score("simulation-passed", 1)
+    except:
+        cie.error(f"weird exception: {traceback.format_exc()}")
     finally:
         cie.info("saving files")
         cie.set_evaluation_dir("episodes", logdir)
