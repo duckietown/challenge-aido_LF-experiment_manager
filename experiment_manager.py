@@ -154,22 +154,21 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         nickname="simulator",
         timeout=config.timeout_regular,
     )
-
-    logger.info("Getting protocol for sim")
-    # noinspection PyProtectedMember
-    sim_ci._get_node_protocol(timeout=config.timeout_initialization)
-
-    for pcname, robot_ci in agents_cis.items():
-        logger.info("Getting protocol for agent")
-        # noinspection PyProtectedMember
-        robot_ci._get_node_protocol(timeout=config.timeout_initialization)
-        if True:
-            check_compatibility_between_agent_and_sim(robot_ci, sim_ci)
-
-    attempt_i = 0
-    per_episode = {}
-    stats = {}
     try:
+        logger.info("Getting protocol for sim")
+        # noinspection PyProtectedMember
+        sim_ci._get_node_protocol(timeout=config.timeout_initialization)
+
+        for pcname, robot_ci in agents_cis.items():
+            logger.info("Getting protocol for agent")
+            # noinspection PyProtectedMember
+            robot_ci._get_node_protocol(timeout=config.timeout_initialization)
+            if True:
+                check_compatibility_between_agent_and_sim(robot_ci, sim_ci)
+
+        attempt_i = 0
+        per_episode = {}
+        stats = {}
 
         nfailures = 0
         logger.info(f"Setting seed = {config.seed} for sim")
@@ -620,6 +619,7 @@ def wrap(cie: dc.ChallengeInterfaceEvaluator) -> None:
         cie.set_score("simulation-passed", 1)
     except:
         cie.error(f"weird exception: {traceback.format_exc()}")
+        raise
     finally:
         cie.info("saving files")
         cie.set_evaluation_dir("episodes", logdir)
