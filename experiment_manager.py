@@ -47,7 +47,7 @@ from aido_schemas import (
     SpawnRobot,
     Step,
 )
-from aido_schemas.protocol_simulator import DumpState
+from aido_schemas.protocol_simulator import DumpState, SpawnDuckie
 from aido_schemas.utils import TimeTracker
 from duckietown_challenges import ChallengeInterfaceEvaluator
 from duckietown_world import construct_map, draw_static, DuckietownMap
@@ -365,6 +365,11 @@ async def run_episode(
                 playable=robot_conf.playable,
                 motion=robot_conf.motion,
             ),
+        )
+    for duckie_name, duckie_config in scenario.duckies.items():
+        sim_ci.write_topic_and_expect_zero(
+            "spawn_duckie",
+            SpawnDuckie(name=duckie_name, color=duckie_config.color, pose=duckie_config.pose,),
         )
 
     # start episode
