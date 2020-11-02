@@ -54,7 +54,7 @@ from aido_schemas import (
     Step,
 )
 from aido_schemas.utils import TimeTracker
-from duckietown_challenges import ChallengeInterfaceEvaluator
+from duckietown_challenges import ChallengeInterfaceEvaluator, InvalidEvaluator
 from duckietown_world.rules import RuleEvaluationResult
 from duckietown_world.rules.rule import EvaluatedMetric
 from webserver import WebServer
@@ -317,7 +317,12 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         sim_ci.close()
         logger.info("Simulation done.")
 
-    logger.info(per_episode=per_episode, stats=list(stats))
+    stats = list(stats)
+    logger.info(per_episode=per_episode, stats=stats)
+    if not per_episode or not stats:
+        msg = "Could not find stats."
+        logger.error(msg)
+        raise InvalidEvaluator(msg, stats=stats, per_episode=per_episode)
     cie.set_score("per-episodes", per_episode)
 
     for k in list(stats):
