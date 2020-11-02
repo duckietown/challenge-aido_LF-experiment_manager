@@ -172,7 +172,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                 # noinspection PyProtectedMember
                 robot_ci._get_node_protocol(timeout=config.timeout_initialization)
             except Exception as e:
-                msg = f"Could not get protocol for robot {robot_ci!r}"
+                msg = f"Could not get protocol for player robot {pcname!r}"
                 logger.error(msg)
                 raise Exception(msg) from e
             if True:
