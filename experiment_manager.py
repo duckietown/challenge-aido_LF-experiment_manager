@@ -358,7 +358,7 @@ def notice_thread(msg, interval):
     finally:
         t1 = time.time()
         delta = t1 - t0
-        logger.info(f"{msg}: took {delta} seconds.")
+        logger.info(f"{msg}: took {delta:.1f} seconds.")
         stop = True
         logger.info("waiting for thread to finish")
         t.join()
@@ -391,15 +391,14 @@ async def run_episode(
 
     # spawn robot
     for robot_name, robot_conf in scenario.robots.items():
-        sim_ci.write_topic_and_expect_zero(
-            "spawn_robot",
-            SpawnRobot(
-                robot_name=robot_name,
-                configuration=robot_conf.configuration,
-                playable=robot_conf.controllable,
-                owned_by_player=robot_name in scenario.player_robots,
-            ),
+        sp = SpawnRobot(
+            robot_name=robot_name,
+            configuration=robot_conf.configuration,
+            playable=robot_conf.controllable,
+            owned_by_player=robot_name in scenario.player_robots,
+            color=robot_conf.color,
         )
+        sim_ci.write_topic_and_expect_zero("spawn_robot", sp)
     for duckie_name, duckie_config in scenario.duckies.items():
         sim_ci.write_topic_and_expect_zero(
             "spawn_duckie",
@@ -655,6 +654,7 @@ def go():
         try:
             wrap(cie)
         except RemoteNodeAborted as e:
+
             msg = (
                 "It appears that one of the remote nodes has aborted.\n"
                 "I will wait 10 seconds before aborting myself so that its\n"
