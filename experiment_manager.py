@@ -136,7 +136,9 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         else:
             raise NotImplementedError(p)
         # first open all fifos
-        logger.info(f"Initializing agent", robot_name=robot_name, fifo_in=fifo_in, fifo_out=fifo_out)
+        logger.info(
+            f"Initializing agent", robot_name=robot_name, fifo_in=fifo_in, fifo_out=fifo_out, protocol=p
+        )
         aci = ComponentInterface(
             fifo_in,
             fifo_out,
@@ -144,6 +146,15 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
             nickname=robot_name,
             timeout=config.timeout_regular,
         )
+
+        try:
+            # noinspection PyProtectedMember
+            aci._get_node_protocol(timeout=config.timeout_initialization)
+        except Exception as e:
+            msg = f"Could not get protocol for agent {robot_name!r}"
+            logger.error(msg)
+            raise Exception(msg) from e
+
         agents_cis[robot_name] = aci
 
     logger.info("Now initializing sim connection", sim_in=config.sim_in, sim_out=config.sim_out)
@@ -166,23 +177,23 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
             logger.error(msg)
             raise Exception(msg) from e
 
-        for pcname, robot_ci in agents_cis.items():
-            logger.info("Getting protocol for agent")
-
-            try:
-                # noinspection PyProtectedMember
-                robot_ci._get_node_protocol(timeout=config.timeout_initialization)
-            except Exception as e:
-                msg = f"Could not get protocol for player robot {pcname!r}"
-                logger.error(msg)
-                raise Exception(msg) from e
-            # if False:
-            #     try:
-            #         check_compatibility_between_agent_and_sim(robot_ci, sim_ci)
-            #     except Exception as e:
-            #         msg = f"Robot {robot_ci!r} is not compatible with sim."
-            #         logger.error(msg)
-            #         raise Exception(msg) from e
+        # for pcname, robot_ci in agents_cis.items():
+        #     logger.info(f"Getting protocol for agent {pcname}")
+        #
+        #     try:
+        #         # noinspection PyProtectedMember
+        #         robot_ci._get_node_protocol(timeout=config.timeout_initialization)
+        #     except Exception as e:
+        #         msg = f"Could not get protocol for agent {pcname!r}"
+        #         logger.error(msg)
+        #         raise Exception(msg) from e
+        # if False:
+        #     try:
+        #         check_compatibility_between_agent_and_sim(robot_ci, sim_ci)
+        #     except Exception as e:
+        #         msg = f"Robot {robot_ci!r} is not compatible with sim."
+        #         logger.error(msg)
+        #         raise Exception(msg) from e
 
         attempt_i: int = 0
         per_episode = {}
