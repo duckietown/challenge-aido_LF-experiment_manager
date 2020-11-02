@@ -156,15 +156,32 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
     )
     try:
         logger.info("Getting protocol for sim")
-        # noinspection PyProtectedMember
-        sim_ci._get_node_protocol(timeout=config.timeout_initialization)
+
+        try:
+            # noinspection PyProtectedMember
+            sim_ci._get_node_protocol(timeout=config.timeout_initialization)
+        except Exception as e:
+            msg = f"Cannot get protocol for simulator."
+            logger.error(msg)
+            raise Exception(msg) from e
 
         for pcname, robot_ci in agents_cis.items():
             logger.info("Getting protocol for agent")
-            # noinspection PyProtectedMember
-            robot_ci._get_node_protocol(timeout=config.timeout_initialization)
+
+            try:
+                # noinspection PyProtectedMember
+                robot_ci._get_node_protocol(timeout=config.timeout_initialization)
+            except Exception as e:
+                msg = f"Could not get protocol for robot {robot_ci!r}"
+                logger.error(msg)
+                raise Exception(msg) from e
             if True:
-                check_compatibility_between_agent_and_sim(robot_ci, sim_ci)
+                try:
+                    check_compatibility_between_agent_and_sim(robot_ci, sim_ci)
+                except Exception as e:
+                    msg = f"Robot {robot_ci!r} is not compatible with sim."
+                    logger.error(msg)
+                    raise Exception(msg) from e
 
         attempt_i = 0
         per_episode = {}
