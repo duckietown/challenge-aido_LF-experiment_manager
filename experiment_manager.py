@@ -47,7 +47,7 @@ from aido_schemas import (
     SpawnRobot,
     Step,
 )
-from aido_schemas.protocol_simulator import DumpState, SpawnDuckie
+from aido_schemas.protocol_simulator import DumpState, GetDuckieState, SpawnDuckie
 from aido_schemas.utils import TimeTracker
 from duckietown_challenges import ChallengeInterfaceEvaluator
 from duckietown_world import construct_map, draw_static, DuckietownMap
@@ -497,6 +497,13 @@ async def run_episode(
                         rs = GetRobotState(npc_robot_name, t_effective)
                         f = functools.partial(
                             sim_ci.write_topic_and_expect, "get_robot_state", rs, expect="robot_state",
+                        )
+                        await loop.run_in_executor(executor, f)
+                with tt.measure(f"get_duckie_state"):
+                    for duckie_name in scenario.duckies:
+                        rs = GetDuckieState(duckie_name, t_effective)
+                        f = functools.partial(
+                            sim_ci.write_topic_and_expect, "get_duckie_state", rs, expect="duckie_state",
                         )
                         await loop.run_in_executor(executor, f)
 
