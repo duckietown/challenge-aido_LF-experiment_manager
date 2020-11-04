@@ -65,6 +65,14 @@ __version__ = "6.0.28"
 logger.info(f"experiment_manager {__version__}")
 P = functools.partial
 
+from procgraph import logger as procgraph_logger
+
+procgraph_logger.setLevel(logger.INFO)
+
+from aido_analyze import logger as aido_analyze_logger
+
+aido_analyze_logger.setLevel(logger.INFO)
+
 
 @dataclass
 class MyConfig:
