@@ -5,3 +5,9 @@ aido-protocols-daffy
 aido-analyze-daffy
 duckietown-world-daffy
 duckietown-challenges-daffy
+# those are needed later anyway, we optimize a bit
+#
+# beautifulsoup4 # opt
+# compmake-z6 # opt
+procgraph-z6
+PyGeometry-z6
