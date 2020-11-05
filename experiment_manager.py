@@ -54,7 +54,7 @@ from aido_schemas import (
     Step,
 )
 from aido_schemas.utils import TimeTracker
-from duckietown_challenges import ChallengeInterfaceEvaluator, InvalidEvaluator
+from duckietown_challenges import ChallengeInterfaceEvaluator, InvalidEnvironment, InvalidEvaluator
 from duckietown_world.rules import RuleEvaluationResult
 from duckietown_world.rules.rule import EvaluatedMetric
 from webserver import WebServer
@@ -72,6 +72,10 @@ procgraph_logger.setLevel(logger.INFO)
 from aido_analyze import logger as aido_analyze_logger
 
 aido_analyze_logger.setLevel(logger.INFO)
+
+from zuper_nodes_wrapper import logger as zuper_nodes_wrapper_logger
+
+zuper_nodes_wrapper_logger.setLevel(logger.INFO)
 
 
 @dataclass
@@ -98,8 +102,21 @@ class MyConfig:
     do_webserver: bool = True
 
 
+def list_all_files(wd: str) -> List[str]:
+    return [os.path.join(dp, f) for dp, dn, fn in os.walk(wd) for f in fn]
+
+
+from zuper_commons.fs import write_ustring_to_utf8_file
+
+
 async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
     config_ = env_as_yaml("experiment_manager_parameters")
+
+    MUST = "/fifos/runner"
+    write_ustring_to_utf8_file("experiment_manager", "/fifos/experiment_manager")
+    if not os.path.exists(MUST):
+        msg = f"Path {MUST} does not exist"
+        raise InvalidEnvironment(msg=msg, lf=list_all_files("/fifos"))
 
     config = cast(MyConfig, object_from_ipce(config_, MyConfig))
     logger.info(config_yaml=config_, config_parsed=config)
