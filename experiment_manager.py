@@ -154,6 +154,9 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
             nickname=robot_name,
             timeout=config.timeout_regular,
         )
+        logger.info(
+            f"Getting agent protocol", robot_name=robot_name, fifo_in=fifo_in, fifo_out=fifo_out, protocol=p
+        )
 
         try:
             # noinspection PyProtectedMember
