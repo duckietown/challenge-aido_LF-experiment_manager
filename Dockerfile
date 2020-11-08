@@ -21,4 +21,15 @@ RUN pip install . --no-deps
 
 RUN  dt-experiment-manager --help
 
+RUN wget -q https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz && \
+    tar xvf ffmpeg-git-amd64-static.tar.xz --strip-components=1
+RUN cp ./ffmpeg /usr/bin/ffmpeg
+RUN which ffmpeg
+RUN ffmpeg -version
+#RUN apt-get update && apt-get install -y  software-properties-common && \
+#    add-apt-repository ppa:jonathonf/ffmpeg-4 && \
+#    apt-get update && apt-get install -y ffmpeg
+#RUN ffmpeg -version
+RUN cat /etc/issue
+
 ENTRYPOINT dt-experiment-manager
