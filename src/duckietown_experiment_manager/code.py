@@ -6,6 +6,7 @@ import functools
 import json
 import os
 import shutil
+import subprocess
 import time
 import traceback
 from concurrent.futures.thread import ThreadPoolExecutor
@@ -284,7 +285,9 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
 
             if length_s > 0:
                 with notice_thread("Make video", 2):
-                    make_video_ui_image(log_filename=fn, output_video=os.path.join(dn, "ui_image.mp4"))
+                    output_video = os.path.join(dn, "ui_image.mp4")
+                    make_video_ui_image(log_filename=fn, output_video=output_video)
+                    subprocess.check_call(["./makegif.sh", output_video])
 
                 for pc_name in player_robots:
 
@@ -295,6 +298,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                     out_video = os.path.join(dn_i, "camera.mp4")
                     with notice_thread("Make video", 2):
                         make_video1(log_filename=fn, output_video=out_video, robot_name=pc_name)
+                        subprocess.check_call(["./makegif.sh", out_video])
 
                     if len(evaluated) == 0:
                         msg = "Empty evaluated"
