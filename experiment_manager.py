@@ -61,7 +61,7 @@ from zuper_typing import can_be_used_as2
 from webserver import WebServer
 
 logger = ZLogger("experiment_manager")
-__version__ = "6.0.33"
+__version__ = "6.0.34"
 
 logger.info(f"experiment_manager {__version__}")
 P = functools.partial
