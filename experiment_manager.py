@@ -16,14 +16,6 @@ from typing import Callable, cast, Dict, Iterator, List, Optional
 
 import numpy as np
 import yaml
-from zuper_commons.logs import ZLogger
-from zuper_commons.types import ZException, ZValueError
-from zuper_ipce import ipce_from_object, object_from_ipce
-from zuper_nodes.structures import RemoteNodeAborted
-from zuper_nodes_wrapper.struct import MsgReceived
-from zuper_nodes_wrapper.wrapper_outside import ComponentInterface
-from zuper_typing import can_be_used_as2
-
 from aido_analyze.utils_drawing import read_and_draw
 from aido_analyze.utils_video import make_video1, make_video_ui_image
 from aido_schemas import (
@@ -58,6 +50,14 @@ from aido_schemas.utils import TimeTracker
 from duckietown_challenges import ChallengeInterfaceEvaluator, InvalidEnvironment, InvalidEvaluator
 from duckietown_world.rules import RuleEvaluationResult
 from duckietown_world.rules.rule import EvaluatedMetric
+from zuper_commons.logs import ZLogger
+from zuper_commons.types import ZException, ZValueError
+from zuper_ipce import ipce_from_object, object_from_ipce
+from zuper_nodes.structures import RemoteNodeAborted
+from zuper_nodes_wrapper.struct import MsgReceived
+from zuper_nodes_wrapper.wrapper_outside import ComponentInterface
+from zuper_typing import can_be_used_as2
+
 from webserver import WebServer
 
 logger = ZLogger("experiment_manager")
@@ -77,6 +77,8 @@ aido_analyze_logger.setLevel(logger.INFO)
 from zuper_nodes_wrapper import logger as zuper_nodes_wrapper_logger
 
 zuper_nodes_wrapper_logger.setLevel(logger.INFO)
+
+from zuper_commons.fs import write_ustring_to_utf8_file
 
 
 @dataclass
@@ -105,9 +107,6 @@ class MyConfig:
 
 def list_all_files(wd: str) -> List[str]:
     return [os.path.join(dp, f) for dp, dn, fn in os.walk(wd) for f in fn]
-
-
-from zuper_commons.fs import write_ustring_to_utf8_file
 
 
 async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
@@ -446,9 +445,14 @@ async def run_episode(
 
     loop = asyncio.get_event_loop()
 
-    # not_playable_robots = [_ for _ in scenario.robots if not scenario.robots[_].playable]
+    stop_at = None
     with ThreadPoolExecutor(max_workers=5) as executor:
         while True:
+            steps += 1
+            if stop_at is not None:
+                if steps == stop_at:
+                    logger.info(f"Reached {steps} steps. Finishing. ")
+                    break
             if current_sim_time >= episode_length_s:
                 logger.info(f"Reached {episode_length_s:1f} seconds. Finishing. ")
                 break
@@ -481,9 +485,17 @@ async def run_episode(
                     sim_state: SimulationState = recv.data
 
                     if sim_state.done:
-                        msg = f"Breaking because of simulator."
-                        logger.info(msg, sim_state=sim_state)
-                        break
+                        if stop_at is None:
+                            NMORE = 3
+                            stop_at = steps + NMORE
+                            msg = (
+                                f"Breaking because of simulator. Will break in {NMORE} more steps at step "
+                                f"= {stop_at}."
+                            )
+                            logger.info(msg, sim_state=sim_state)
+                        else:
+                            msg = f"Simulation is done. Waiting for step {stop_at} to stop."
+                            logger.info(msg)
 
                 for agent_name, agent_ci in agents_cis.items():
 
