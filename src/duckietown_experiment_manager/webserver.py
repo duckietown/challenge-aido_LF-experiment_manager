@@ -6,10 +6,10 @@ from aiohttp import MultipartWriter, web
 from aiohttp.abc import Request
 from multidict import CIMultiDict
 
-__all__ = ['WebServer']
+__all__ = ["ImageWebServer"]
 
 
-class WebServer:
+class ImageWebServer:
     def __init__(self, address: str, port: int):
         self.address = address
         self.port = port
@@ -41,7 +41,7 @@ class WebServer:
         response = web.StreamResponse(
             status=200,
             reason="OK",
-            headers={"Content-Type": "multipart/x-mixed-replace;" "boundary=%s" % my_boundary, },
+            headers={"Content-Type": "multipart/x-mixed-replace;" "boundary=%s" % my_boundary,},
         )
         await response.prepare(request)
 
@@ -61,12 +61,12 @@ class WebServer:
 
     async def index(self, request):
         response = """
-        
+
         <html>
         <head></head>
         <body>
-        
-        
+
+
         """
         for image_name in self.name2sub2queue:
             response += f'\n<img width="320" src="/image?image={image_name}"/>'

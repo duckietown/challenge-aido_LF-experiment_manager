@@ -9,13 +9,16 @@ RUN pip3 install -U "pip>=20.2"
 COPY requirements.* ./
 RUN cat requirements.* > .requirements.txt
 RUN  pip3 install --use-feature=2020-resolver -r .requirements.txt
-
+RUN pip3 uninstall -y dataclasses
 RUN pip3 list
 RUN pipdeptree
 
 
+
 COPY . .
 
-RUN  python3 -c "from  experiment_manager import *"
+RUN pip install . --no-deps
 
-ENTRYPOINT ["python3", "experiment_manager.py"]
+RUN  dt-experiment-manager --help
+
+ENTRYPOINT dt-experiment-manager

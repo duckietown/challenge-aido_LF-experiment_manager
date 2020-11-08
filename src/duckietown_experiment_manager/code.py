@@ -13,9 +13,17 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from threading import Thread
 from typing import Callable, cast, Dict, Iterator, List, Optional
-
+import duckietown_challenges as dc
 import numpy as np
 import yaml
+from .webserver import ImageWebServer
+from zuper_commons.fs import write_ustring_to_utf8_file
+from zuper_commons.types import ZException, ZValueError
+from zuper_ipce import ipce_from_object, object_from_ipce
+from zuper_nodes_wrapper.struct import MsgReceived
+from zuper_nodes_wrapper.wrapper_outside import ComponentInterface
+from zuper_typing import can_be_used_as2
+
 from aido_analyze.utils_drawing import read_and_draw
 from aido_analyze.utils_video import make_video1, make_video_ui_image
 from aido_schemas import (
@@ -50,35 +58,9 @@ from aido_schemas.utils import TimeTracker
 from duckietown_challenges import ChallengeInterfaceEvaluator, InvalidEnvironment, InvalidEvaluator
 from duckietown_world.rules import RuleEvaluationResult
 from duckietown_world.rules.rule import EvaluatedMetric
-from zuper_commons.logs import ZLogger
-from zuper_commons.types import ZException, ZValueError
-from zuper_ipce import ipce_from_object, object_from_ipce
-from zuper_nodes.structures import RemoteNodeAborted
-from zuper_nodes_wrapper.struct import MsgReceived
-from zuper_nodes_wrapper.wrapper_outside import ComponentInterface
-from zuper_typing import can_be_used_as2
+from . import logger
 
-from webserver import WebServer
-
-logger = ZLogger("experiment_manager")
-__version__ = "6.0.34"
-
-logger.info(f"experiment_manager {__version__}")
 P = functools.partial
-
-from procgraph import logger as procgraph_logger
-
-procgraph_logger.setLevel(logger.INFO)
-
-from aido_analyze import logger as aido_analyze_logger
-
-aido_analyze_logger.setLevel(logger.INFO)
-
-from zuper_nodes_wrapper import logger as zuper_nodes_wrapper_logger
-
-zuper_nodes_wrapper_logger.setLevel(logger.INFO)
-
-from zuper_commons.fs import write_ustring_to_utf8_file
 
 
 @dataclass
@@ -121,7 +103,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
     config = cast(MyConfig, object_from_ipce(config_, MyConfig))
     logger.info(config_yaml=config_, config_parsed=config)
     if config.do_webserver:
-        webserver = WebServer(address="0.0.0.0", port=config.port)
+        webserver = ImageWebServer(address="0.0.0.0", port=config.port)
         await asyncio.create_task(webserver.init())
     else:
         webserver = None
@@ -287,7 +269,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                     physics_dt=config.physics_dt,
                     webserver=webserver,
                 )
-                logger.info(f"Finished episode {episode_name} with length {length_s}")
+                logger.info(f"Finished episode {episode_name} with length {length_s:.2f}")
 
             except:
                 msg = "Anomalous error from run_episode()"
@@ -407,7 +389,7 @@ async def run_episode(
     physics_dt: float,
     episode_name: str,
     scenario: Scenario,
-    webserver: Optional[WebServer],
+    webserver: Optional[ImageWebServer],
     config: MyConfig,
 ) -> float:
     """ returns length of episode """
@@ -454,7 +436,7 @@ async def run_episode(
                     logger.info(f"Reached {steps} steps. Finishing. ")
                     break
             if current_sim_time >= episode_length_s:
-                logger.info(f"Reached {episode_length_s:1f} seconds. Finishing. ")
+                logger.info(f"Reached {episode_length_s:.1f} seconds. Finishing. ")
                 break
 
             tt = TimeTracker(steps)
@@ -662,50 +644,3 @@ def env_as_yaml(name: str) -> dict:
     except Exception as e:
         msg = f"Could not load YAML: {e}\n\n{v}"
         raise Exception(msg)
-
-
-import duckietown_challenges as dc
-
-
-def wrap(cie: dc.ChallengeInterfaceEvaluator) -> None:
-    d = cie.get_tmp_dir()
-
-    logdir = os.path.join(d, "episodes")
-
-    attempts = os.path.join(d, "attempts")
-    if not os.path.exists(logdir):
-        os.makedirs(logdir)
-    if not os.path.exists(attempts):
-        os.makedirs(attempts)
-    try:
-        asyncio.run(main(cie, logdir, attempts), debug=True)
-        cie.set_score("simulation-passed", 1)
-    except:
-        cie.error(f"weird exception: {traceback.format_exc()}")
-        raise
-    finally:
-        cie.info("saving files")
-        cie.set_evaluation_dir("episodes", logdir)
-
-    cie.info("experiment_manager::wrap() terminated gracefully.")
-
-
-def go():
-    with dc.scoring_context() as cie:
-        try:
-            wrap(cie)
-        except RemoteNodeAborted as e:
-
-            msg = (
-                "It appears that one of the remote nodes has aborted.\n"
-                "I will wait 10 seconds before aborting myself so that its\n"
-                "error will be detected by the evaluator rather than mine."
-            )
-            msg += f"\n\n{traceback.format_exc()}"
-            cie.error(msg)
-            time.sleep(10)
-            raise
-
-
-if __name__ == "__main__":
-    go()
