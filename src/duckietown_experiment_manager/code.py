@@ -286,8 +286,10 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
             if length_s > 0:
                 with notice_thread("Make video", 2):
                     output_video = os.path.join(dn, "ui_image.mp4")
+                    output_gif = os.path.join(dn, "ui_image.gif")
                     make_video_ui_image(log_filename=fn, output_video=output_video)
-                    subprocess.check_call(["./makegif.sh", output_video])
+
+                    subprocess.check_call(["./makegif.sh", output_video, output_gif])
 
                 for pc_name in player_robots:
 
@@ -296,9 +298,10 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                         evaluated = read_and_draw(fn, dn_i, pc_name)
 
                     out_video = os.path.join(dn_i, "camera.mp4")
+                    out_gif = os.path.join(dn_i, "camera.gif")
                     with notice_thread("Make video", 2):
                         make_video1(log_filename=fn, output_video=out_video, robot_name=pc_name)
-                        subprocess.check_call(["./makegif.sh", out_video])
+                        subprocess.check_call(["./makegif.sh", out_video, out_gif])
 
                     if len(evaluated) == 0:
                         msg = "Empty evaluated"
