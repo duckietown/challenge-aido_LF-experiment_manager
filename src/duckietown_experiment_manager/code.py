@@ -305,7 +305,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                             log_filename=fn,
                             output_video=out_video,
                             robot_name=pc_name,
-                            banner_image="banner1",
+                            banner_image="banner1.png",
                         )
                         subprocess.check_call(["./makegif.sh", out_video, out_gif])
 
