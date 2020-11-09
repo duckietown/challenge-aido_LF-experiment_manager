@@ -26,7 +26,7 @@ from zuper_nodes_wrapper.wrapper_outside import ComponentInterface
 from zuper_typing import can_be_used_as2
 
 from aido_analyze.utils_drawing import read_and_draw
-from aido_analyze.utils_video import make_video1, make_video_ui_image
+from aido_analyze.utils_video import make_video1, make_video2, make_video_ui_image
 from aido_schemas import (
     DB20Observations,
     DB20ObservationsPlusState,
@@ -300,7 +300,13 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                     out_video = os.path.join(dn_i, "camera.mp4")
                     out_gif = os.path.join(dn_i, "camera.gif")
                     with notice_thread("Make video", 2):
-                        make_video1(log_filename=fn, output_video=out_video, robot_name=pc_name)
+                        # make_video1(log_filename=fn, output_video=out_video, robot_name=pc_name)
+                        make_video2(
+                            log_filename=fn,
+                            output_video=out_video,
+                            robot_name=pc_name,
+                            banner_image="banner1",
+                        )
                         subprocess.check_call(["./makegif.sh", out_video, out_gif])
 
                     if len(evaluated) == 0:
