@@ -1,23 +1,16 @@
-#!/usr/bin/env python
-
-
 import asyncio
 import functools
 import json
 import os
 import shutil
 import subprocess
-import time
 import traceback
 from concurrent.futures.thread import ThreadPoolExecutor
-from contextlib import contextmanager
 from dataclasses import dataclass
-from threading import Thread
-from typing import Callable, cast, Dict, Iterator, List, Optional
-import duckietown_challenges as dc
+from typing import cast, Dict, Iterator, List, Optional
+
 import numpy as np
 import yaml
-from .webserver import ImageWebServer
 from zuper_commons.fs import write_ustring_to_utf8_file
 from zuper_commons.types import ZException, ZValueError
 from zuper_ipce import ipce_from_object, object_from_ipce
@@ -25,8 +18,9 @@ from zuper_nodes_wrapper.struct import MsgReceived
 from zuper_nodes_wrapper.wrapper_outside import ComponentInterface
 from zuper_typing import can_be_used_as2
 
+import duckietown_challenges as dc
 from aido_analyze.utils_drawing import read_and_draw
-from aido_analyze.utils_video import make_video1, make_video2, make_video_ui_image
+from aido_analyze.utils_video import make_video2, make_video_ui_image
 from aido_schemas import (
     DB20Observations,
     DB20ObservationsPlusState,
@@ -56,10 +50,17 @@ from aido_schemas import (
     Step,
 )
 from aido_schemas.utils import TimeTracker
-from duckietown_challenges import ChallengeInterfaceEvaluator, InvalidEnvironment, InvalidEvaluator
+from duckietown_challenges import (
+    ChallengeInterfaceEvaluator,
+    InvalidEnvironment,
+    InvalidEvaluator,
+    InvalidSubmission,
+)
 from duckietown_world.rules import RuleEvaluationResult
 from duckietown_world.rules.rule import EvaluatedMetric
 from . import logger
+from .notice_thread import notice_thread
+from .webserver import ImageWebServer
 
 P = functools.partial
 
@@ -92,17 +93,21 @@ def list_all_files(wd: str) -> List[str]:
     return [os.path.join(dp, f) for dp, dn, fn in os.walk(wd) for f in fn]
 
 
-async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
-    config_ = env_as_yaml("experiment_manager_parameters")
-
+def check_existence_runner_file():
     MUST = "/fifos/runner"
     write_ustring_to_utf8_file("experiment_manager", "/fifos/experiment_manager")
     if not os.path.exists(MUST):
         msg = f"Path {MUST} does not exist"
         raise InvalidEnvironment(msg=msg, lf=list_all_files("/fifos"))
 
+
+async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
+    config_ = env_as_yaml("experiment_manager_parameters")
     config = cast(MyConfig, object_from_ipce(config_, MyConfig))
     logger.info(config_yaml=config_, config_parsed=config)
+
+    check_existence_runner_file()
+
     if config.do_webserver:
         webserver = ImageWebServer(address="0.0.0.0", port=config.port)
         await asyncio.create_task(webserver.init())
@@ -128,7 +133,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
             controlled_robots.append(name)
 
     msg = "Obtained episodes from scenario maker. Now initializing agents com."
-    logger.info(
+    logger.debug(
         msg, player_robots=player_robots, controlled_robots=controlled_robots,
     )
     agents_cis: Dict[str, ComponentInterface] = {}
@@ -154,7 +159,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
             nickname=robot_name,
             timeout=config.timeout_regular,
         )
-        logger.info(
+        logger.debug(
             f"Getting agent protocol", robot_name=robot_name, fifo_in=fifo_in, fifo_out=fifo_out, protocol=p
         )
 
@@ -164,7 +169,10 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         except Exception as e:
             msg = f"Could not get protocol for agent {robot_name!r}"
             logger.error(msg)
-            raise Exception(msg) from e
+            if robot_name in player_robots:
+                raise InvalidSubmission(msg) from e
+            elif robot_name in controlled_robots:
+                raise InvalidEvaluator(msg) from e
 
         agents_cis[robot_name] = aci
 
@@ -186,55 +194,36 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         except Exception as e:
             msg = f"Cannot get protocol for simulator."
             logger.error(msg)
-            raise Exception(msg) from e
-
-        # for pcname, robot_ci in agents_cis.items():
-        #     logger.info(f"Getting protocol for agent {pcname}")
-        #
-        #     try:
-        #         # noinspection PyProtectedMember
-        #         robot_ci._get_node_protocol(timeout=config.timeout_initialization)
-        #     except Exception as e:
-        #         msg = f"Could not get protocol for agent {pcname!r}"
-        #         logger.error(msg)
-        #         raise Exception(msg) from e
-        # if False:
-        #     try:
-        #         check_compatibility_between_agent_and_sim(robot_ci, sim_ci)
-        #     except Exception as e:
-        #         msg = f"Robot {robot_ci!r} is not compatible with sim."
-        #         logger.error(msg)
-        #         raise Exception(msg) from e
+            raise InvalidEvaluator(msg) from e
 
         attempt_i: int = 0
         per_episode = {}
         stats = {}
 
         nfailures: int = 0
-        logger.info(f"Setting seed = {config.seed} for sim")
+        logger.debug(f"Setting seed = {config.seed} for sim and agents.")
         sim_ci.write_topic_and_expect_zero("seed", config.seed)
 
         for pcname, robot_ci in agents_cis.items():
-            logger.info(f"Setting seed = {config.seed} for agent")
             robot_ci.write_topic_and_expect_zero("seed", config.seed)
 
         while episodes:
 
             if nfailures >= config.max_failures:
                 msg = f"Too many failures: {nfailures}"
-                raise Exception(msg)  # XXX
+                raise InvalidEvaluator(msg)  # XXX
 
             episode_spec = episodes[0]
             episode_name = episode_spec.episode_name
 
-            logger.info(f"Starting episode {episode_name}")
+            logger.info(f"Starting episode '{episode_name}'.")
 
             dn_final = os.path.join(log_dir, episode_name)
 
             if os.path.exists(dn_final):
                 shutil.rmtree(dn_final)
 
-            dn = os.path.join(attempts, episode_name + f".attempt{attempt_i}")
+            dn = os.path.join(log_dir, episode_name + f".attempt{attempt_i}")
             if os.path.exists(dn):
                 shutil.rmtree(dn)
 
@@ -251,16 +240,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
 
             logger.info("Now running episode")
 
-            # num_playable = len([_ for _ in episode_spec.scenario.robots.values() if _.playable])
-            # if num_playable != len(playable_robots):
-            #     msg = (
-            #         f"The scenario requires {num_playable} robots,"
-            #         f"but I only know "
-            #         f"{len(playable_robots)} agents"
-            #     )
-            #     raise Exception(msg)  # XXX
             try:
-                logger.info(f"Starting episode {episode_name}")
                 length_s = await run_episode(
                     sim_ci,
                     agents_cis,
@@ -281,7 +261,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                 os.rename(fn_tmp, fn)
 
             # output = os.path.join(dn, 'visualization')
-            logger.info("Now creating visualization and analyzing statistics.")
+            logger.debug("Now creating visualization and analyzing statistics.")
 
             if length_s > 0:
                 with notice_thread("Make video", 2):
@@ -292,7 +272,6 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                     subprocess.check_call(["./makegif.sh", output_video, output_gif])
 
                 for pc_name in player_robots:
-
                     dn_i = os.path.join(dn, pc_name)
                     with notice_thread("Visualization", 2):
                         evaluated = read_and_draw(fn, dn_i, pc_name)
@@ -349,7 +328,6 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         for agent_name, agent_ci in agents_cis.items():
             agent_ci.close()
         sim_ci.close()
-        logger.info("Simulation done.")
 
     stats = list(stats)
     logger.info(per_episode=per_episode, stats=stats)
@@ -366,34 +344,6 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         cie.set_score(f"{k}_median", float(np.median(values)))
         cie.set_score(f"{k}_min", float(np.min(values)))
         cie.set_score(f"{k}_max", float(np.max(values)))
-
-
-@contextmanager
-def notice_thread(msg, interval):
-    stop = False
-    t0 = time.time()
-    t = Thread(target=notice_thread_child, args=(msg, interval, lambda: stop))
-    t.start()
-    try:
-
-        yield
-
-    finally:
-        t1 = time.time()
-        delta = t1 - t0
-        logger.info(f"{msg}: took {delta:.1f} seconds.")
-        stop = True
-        logger.info("waiting for thread to finish")
-        t.join()
-
-
-def notice_thread_child(msg: str, interval: float, stop_condition: Callable[[], bool]) -> None:
-    t0 = time.time()
-    while not stop_condition():
-        delta = time.time() - t0
-        logger.info(msg + f"(running for {int(delta)} seconds)")
-        time.sleep(interval)
-    # logger.info('notice_thread_child finishes')
 
 
 async def run_episode(
