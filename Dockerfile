@@ -18,6 +18,7 @@ RUN pipdeptree
 COPY . .
 
 RUN pip install . --no-deps
+RUN pip3 list
 
 RUN  dt-experiment-manager --help
 

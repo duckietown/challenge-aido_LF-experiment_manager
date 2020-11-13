@@ -7,7 +7,7 @@ import subprocess
 import traceback
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import cast, Dict, Iterator, List, Optional
+from typing import cast, Dict, Iterator, List, Optional, Set
 
 import numpy as np
 import yaml
@@ -17,7 +17,7 @@ from zuper_ipce import ipce_from_object, object_from_ipce
 from zuper_nodes_wrapper.struct import MsgReceived
 from zuper_nodes_wrapper.wrapper_outside import ComponentInterface
 from zuper_typing import can_be_used_as2
-
+import stopit
 import duckietown_challenges as dc
 from aido_analyze.utils_drawing import read_and_draw
 from aido_analyze.utils_video import make_video2, make_video_ui_image
@@ -38,6 +38,7 @@ from aido_schemas import (
     PROTOCOL_NORMAL,
     protocol_scenario_maker,
     protocol_simulator_DB20,
+    RobotName,
     RobotObservations,
     RobotPerformance,
     RobotState,
@@ -132,23 +133,27 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         sm_ci._get_node_protocol(timeout=config.timeout_initialization)
         episodes = get_episodes(sm_ci, episodes_per_scenario=config.episodes_per_scenario, seed=config.seed)
 
-    episode = episodes[0]
-    player_robots = episode.scenario.player_robots
-    controlled_robots = []
-    for name, r in episode.scenario.robots.items():
-        if r.controllable:
-            controlled_robots.append(name)
+    player_robots: Set[RobotName] = set()
+    controlled_robots: Dict[RobotName, str] = {}
+    for episode_ in episodes:
+        if not episode_.scenario.player_robots:
+            raise ZValueError("no player robots in episode", episode=episode_)
 
-    msg = "Obtained episodes from scenario maker. Now initializing agents com."
+        player_robots.update(episode_.scenario.player_robots)
+        for name, r in episode_.scenario.robots.items():
+            if r.controllable:
+                controlled_robots[name] = r.protocol
+    # episode = episodes[0]
+
+    msg = "Obtained episodes. Now initializing agents com."
     logger.debug(
         msg, player_robots=player_robots, controlled_robots=controlled_robots,
     )
     agents_cis: Dict[str, ComponentInterface] = {}
-    for robot_name in controlled_robots:
+    for robot_name, p in controlled_robots.items():
         fifo_in = os.path.join(config.fifo_dir, robot_name + "-in")
         fifo_out = os.path.join(config.fifo_dir, robot_name + "-out")
 
-        p = episode.scenario.robots[robot_name].protocol
         if p == PROTOCOL_FULL:
             expect_protocol = protocol_agent_DB20_fullstate
         elif p == PROTOCOL_NORMAL:
@@ -159,13 +164,17 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         logger.info(
             f"Initializing agent", robot_name=robot_name, fifo_in=fifo_in, fifo_out=fifo_out, protocol=p
         )
-        aci = ComponentInterface(
-            fifo_in,
-            fifo_out,
-            expect_protocol=expect_protocol,
-            nickname=robot_name,
-            timeout=config.timeout_regular,
-        )
+        with stopit.SignalTimeout(config.timeout_regular) as st:
+            aci = ComponentInterface(
+                fifo_in,
+                fifo_out,
+                expect_protocol=expect_protocol,
+                nickname=robot_name,
+                timeout=config.timeout_regular,
+            )
+        if not st:
+            msg = f"Timeout during connection to {robot_name}: {st}"
+            raise InvalidSubmission(msg)
         logger.debug(
             f"Getting agent protocol", robot_name=robot_name, fifo_in=fifo_in, fifo_out=fifo_out, protocol=p
         )
@@ -185,13 +194,18 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
 
     logger.info("Now initializing sim connection", sim_in=config.sim_in, sim_out=config.sim_out)
 
-    sim_ci = ComponentInterface(
-        config.sim_in,
-        config.sim_out,
-        expect_protocol=protocol_simulator_DB20,
-        nickname="simulator",
-        timeout=config.timeout_regular,
-    )
+    st: stopit.SignalTimeout
+    with stopit.SignalTimeout(20) as st:
+        sim_ci = ComponentInterface(
+            config.sim_in,
+            config.sim_out,
+            expect_protocol=protocol_simulator_DB20,
+            nickname="simulator",
+            timeout=config.timeout_regular,
+        )
+    if not st:
+        msg = f"Timeout during connection: {st}"
+        raise InvalidEvaluator(msg)
     try:
         logger.info("Getting protocol for sim")
 
@@ -589,7 +603,9 @@ def get_episodes_from_dirs(dirs: List[str]) -> List[EpisodeSpec]:
             raise ZValueError("dir does not exist", d=d)
         filenames = locate_files(d, pattern)
         if not filenames:
-            raise ZValueError("No files found in directory", d=d, pattern=pattern)
+            raise ZValueError(
+                "No files found in directory", d=d, pattern=pattern, all_files=locate_files(d, "*.*")
+            )
         for f in filenames:
             dn = os.path.dirname(f)
             episode_name = os.path.basename(dn)
