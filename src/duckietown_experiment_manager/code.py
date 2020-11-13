@@ -11,7 +11,7 @@ from typing import cast, Dict, Iterator, List, Optional
 
 import numpy as np
 import yaml
-from zuper_commons.fs import write_ustring_to_utf8_file
+from zuper_commons.fs import locate_files, read_ustring_from_utf8_file, write_ustring_to_utf8_file
 from zuper_commons.types import ZException, ZValueError
 from zuper_ipce import ipce_from_object, object_from_ipce
 from zuper_nodes_wrapper.struct import MsgReceived
@@ -78,13 +78,15 @@ class MyConfig:
 
     sim_in: str
     sim_out: str
-    sm_in: str
-    sm_out: str
+    sm_in: Optional[str]
+    sm_out: Optional[str]
 
     timeout_initialization: int
     timeout_regular: int
 
     port: int  # port for visualization web server
+
+    scenarios: List[str]
 
     do_webserver: bool = True
 
@@ -114,16 +116,21 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
     else:
         webserver = None
 
-    sm_ci = ComponentInterface(
-        config.sm_in,
-        config.sm_out,
-        expect_protocol=protocol_scenario_maker,
-        nickname="scenario_maker",
-        timeout=config.timeout_regular,
-    )
-    # noinspection PyProtectedMember
-    sm_ci._get_node_protocol(timeout=config.timeout_initialization)
-    episodes = get_episodes(sm_ci, episodes_per_scenario=config.episodes_per_scenario, seed=config.seed)
+    if config.scenarios:
+        logger.info("using fixed scenarios")
+        episodes = get_episodes_from_dirs(config.scenarios)
+    else:
+        sm_ci = ComponentInterface(
+            config.sm_in,
+            config.sm_out,
+            expect_protocol=protocol_scenario_maker,
+            nickname="scenario_maker",
+            timeout=config.timeout_regular,
+        )
+
+        # noinspection PyProtectedMember
+        sm_ci._get_node_protocol(timeout=config.timeout_initialization)
+        episodes = get_episodes(sm_ci, episodes_per_scenario=config.episodes_per_scenario, seed=config.seed)
 
     episode = episodes[0]
     player_robots = episode.scenario.player_robots
@@ -356,6 +363,7 @@ async def run_episode(
     config: MyConfig,
 ) -> float:
     """ returns length of episode """
+    logger.info(scenario=scenario)
     episode_length_s = config.episode_length_s
     # clear simulation
     sim_ci.write_topic_and_expect_zero("clear")
@@ -571,6 +579,26 @@ def check_compatibility_between_agent_and_sim(agent_ci: ComponentInterface, sim_
 class EpisodeSpec:
     episode_name: str
     scenario: Scenario
+
+
+def get_episodes_from_dirs(dirs: List[str]) -> List[EpisodeSpec]:
+    pattern = "scenario.yaml"
+    episodes = []
+    for d in dirs:
+        if not os.path.exists:
+            raise ZValueError("dir does not exist", d=d)
+        filenames = locate_files(d, pattern)
+        if not filenames:
+            raise ZValueError("No files found in directory", d=d, pattern=pattern)
+        for f in filenames:
+            dn = os.path.dirname(f)
+            episode_name = os.path.basename(dn)
+            config_ = yaml.load(read_ustring_from_utf8_file(f), Loader=yaml.Loader)
+            scenario = cast(Scenario, object_from_ipce(config_, Scenario))
+            episode_spec = EpisodeSpec(episode_name, scenario)
+            episodes.append(episode_spec)
+
+    return episodes
 
 
 def get_episodes(sm_ci: ComponentInterface, episodes_per_scenario: int, seed: int) -> List[EpisodeSpec]:
