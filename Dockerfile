@@ -5,7 +5,18 @@ ARG PIP_INDEX_URL
 ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 RUN echo PIP_INDEX_URL=${PIP_INDEX_URL}
 
+
+RUN wget -q https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz && \
+    tar xvf ffmpeg-git-amd64-static.tar.xz --strip-components=1
+RUN cp ./ffmpeg /usr/bin/ffmpeg
+RUN which ffmpeg
+RUN ffmpeg -version
+
 RUN pip3 install -U "pip>=20.2"
+
+COPY requirements.pin.txt ./
+RUN pip3 install --use-feature=2020-resolver -r requirements.pin.txt
+
 COPY requirements.* ./
 RUN cat requirements.* > .requirements.txt
 RUN pip3 install --use-feature=2020-resolver -r .requirements.txt
@@ -20,17 +31,6 @@ COPY . .
 RUN pip install . --no-deps
 RUN pip3 list
 
-RUN  dt-experiment-manager --help
-
-RUN wget -q https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz && \
-    tar xvf ffmpeg-git-amd64-static.tar.xz --strip-components=1
-RUN cp ./ffmpeg /usr/bin/ffmpeg
-RUN which ffmpeg
-RUN ffmpeg -version
-#RUN apt-get update && apt-get install -y  software-properties-common && \
-#    add-apt-repository ppa:jonathonf/ffmpeg-4 && \
-#    apt-get update && apt-get install -y ffmpeg
-#RUN ffmpeg -version
-RUN cat /etc/issue
+RUN dt-experiment-manager --help
 
 ENTRYPOINT dt-experiment-manager
