@@ -1,6 +1,6 @@
 from zuper_commons.logs import ZLogger
 
-__version__ = "6.0.48"
+__version__ = "6.0.49"
 
 logger = ZLogger(__name__)
 logger.debug(f"duckietown_experiment_manager version {__version__}")
