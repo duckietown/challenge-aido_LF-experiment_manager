@@ -384,8 +384,12 @@ async def run_episode(
     # set map data
     sim_ci.write_topic_and_expect_zero("set_map", SetMap(map_data=scenario.environment))
 
+    controlled_robots: Dict[RobotName, str] = {}  # protocol
+
     # spawn robot
     for robot_name, robot_conf in scenario.robots.items():
+        if robot_conf.controllable:
+            controlled_robots[robot_name] = robot_conf.protocol
         sp = SpawnRobot(
             robot_name=robot_name,
             configuration=robot_conf.configuration,
@@ -453,7 +457,7 @@ async def run_episode(
 
                     if sim_state.done:
                         if stop_at is None:
-                            NMORE = 3
+                            NMORE = 15
                             stop_at = steps + NMORE
                             msg = (
                                 f"Breaking because of simulator. Will break in {NMORE} more steps at step "
@@ -464,7 +468,9 @@ async def run_episode(
                             msg = f"Simulation is done. Waiting for step {stop_at} to stop."
                             logger.info(msg)
 
-                for agent_name, agent_ci in agents_cis.items():
+                for agent_name in controlled_robots:
+                    agent_ci = agents_cis[agent_name]
+                    # for agent_name, agent_ci in agents_cis.items():
 
                     with tt.measure(f"sim_compute_performance-{agent_name}"):
                         f = P(
