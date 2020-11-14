@@ -366,7 +366,8 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
 
     for k in list(stats):
         # logger.info(k=k, values=values)
-        values = [_[k] for _ in per_episode.values()]
+        values = [_[k] for _ in per_episode.values() if k in _]
+
         cie.set_score(f"{k}_mean", float(np.mean(values)))
         cie.set_score(f"{k}_median", float(np.median(values)))
         cie.set_score(f"{k}_min", float(np.min(values)))
