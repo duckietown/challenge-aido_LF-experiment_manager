@@ -133,24 +133,30 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         sm_ci._get_node_protocol(timeout=config.timeout_initialization)
         episodes = get_episodes(sm_ci, episodes_per_scenario=config.episodes_per_scenario, seed=config.seed)
 
-    player_robots: Set[RobotName] = set()
-    controlled_robots: Dict[RobotName, str] = {}
+    all_player_robots: Set[RobotName] = set()
+    all_controlled_robots: Dict[RobotName, str] = {}
     for episode_ in episodes:
         if not episode_.scenario.player_robots:
             raise ZValueError("no player robots in episode", episode=episode_)
 
-        player_robots.update(episode_.scenario.player_robots)
+        all_player_robots.update(episode_.scenario.player_robots)
         for name, r in episode_.scenario.robots.items():
             if r.controllable:
-                controlled_robots[name] = r.protocol
+                if name in all_controlled_robots:
+                    p0 = all_controlled_robots[name]
+                    if p0 != r.protocol:
+                        msg = f"Mismatch with protocols for robot {name}"
+                        raise InvalidEvaluator(msg)
+                else:
+                    all_controlled_robots[name] = r.protocol
     # episode = episodes[0]
 
     msg = "Obtained episodes. Now initializing agents com."
     logger.debug(
-        msg, player_robots=player_robots, controlled_robots=controlled_robots,
+        msg, all_player_robots=all_player_robots, all_controlled_robots=all_controlled_robots,
     )
     agents_cis: Dict[str, ComponentInterface] = {}
-    for robot_name, p in controlled_robots.items():
+    for robot_name, p in all_controlled_robots.items():
         fifo_in = os.path.join(config.fifo_dir, robot_name + "-in")
         fifo_out = os.path.join(config.fifo_dir, robot_name + "-out")
 
@@ -185,9 +191,9 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         except Exception as e:
             msg = f"Could not get protocol for agent {robot_name!r}"
             logger.error(msg)
-            if robot_name in player_robots:
+            if robot_name in all_player_robots:
                 raise InvalidSubmission(msg) from e
-            elif robot_name in controlled_robots:
+            elif robot_name in all_controlled_robots:
                 raise InvalidEvaluator(msg) from e
 
         agents_cis[robot_name] = aci
@@ -259,7 +265,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                 agent_ci.cc(fw)
             sim_ci.cc(fw)
 
-            logger.info("Now running episode")
+            logger.info(f"Now running episode {episode_name}")
 
             try:
                 length_s = await run_episode(
@@ -292,7 +298,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
 
                     subprocess.check_call(["./makegif.sh", output_video, output_gif])
 
-                for pc_name in player_robots:
+                for pc_name in episode_spec.scenario.player_robots:
                     dn_i = os.path.join(dn, pc_name)
                     with notice_thread("Visualization", 2):
                         evaluated = read_and_draw(fn, dn_i, pc_name)
@@ -501,7 +507,7 @@ async def run_episode(
                     with tt.measure(f"agent_compute-{agent_name}"):
                         try:
                             map_data = cast(str, scenario.environment)
-                            pr = scenario.robots[agent_name].protocol
+                            pr = controlled_robots[agent_name]
                             if pr == PROTOCOL_FULL:
                                 obs_plus = DB20ObservationsPlusState(
                                     camera=obs.camera,
