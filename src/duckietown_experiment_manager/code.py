@@ -14,6 +14,7 @@ import yaml
 from zuper_commons.fs import locate_files, read_ustring_from_utf8_file, write_ustring_to_utf8_file
 from zuper_commons.types import ZException, ZValueError
 from zuper_ipce import ipce_from_object, object_from_ipce
+from zuper_nodes import RemoteNodeAborted
 from zuper_nodes_wrapper.struct import MsgReceived
 from zuper_nodes_wrapper.wrapper_outside import ComponentInterface
 from zuper_typing import can_be_used_as2
@@ -232,7 +233,14 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         sim_ci.write_topic_and_expect_zero("seed", config.seed)
 
         for pcname, robot_ci in agents_cis.items():
-            robot_ci.write_topic_and_expect_zero("seed", config.seed)
+            try:
+                robot_ci.write_topic_and_expect_zero("seed", config.seed)
+            except RemoteNodeAborted as e:
+                se = traceback.format_exc()
+                if "CUDA error: out of memory" in se:
+                    msg = f"Detected out of CUDA memory:\n\n{se}"
+                    raise InvalidEnvironment(msg) from e
+                raise InvalidSubmission(msg) from e
 
         while episodes:
 
