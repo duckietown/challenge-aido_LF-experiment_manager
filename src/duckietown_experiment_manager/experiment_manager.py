@@ -19,8 +19,11 @@ __all__ = ["go"]
 
 def wrap(cie: dc.ChallengeInterfaceEvaluator) -> None:
     d = cie.get_tmp_dir()
+    r = "challenge-evaluation-output/episodes"
+    # noinspection PyUnresolvedReferences
+    logdir = os.path.join(cie.root, r)
 
-    logdir = os.path.join(d, "episodes")
+    # logdir = os.path.join(d, "episodes")
 
     attempts = os.path.join(d, "attempts")
     if not os.path.exists(logdir):
