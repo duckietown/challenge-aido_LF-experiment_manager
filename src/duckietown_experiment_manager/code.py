@@ -354,6 +354,16 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
             attempt_i += 1
     except dc.InvalidSubmission:
         raise
+    except dc.InvalidEvaluator:
+        raise
+    except dc.InvalidConfiguration:
+        raise
+    except dc.InvalidEnvironment:
+        raise
+    except dc.AbortedByUser:
+        raise
+    except dc.AbortedByServer:
+        raise
     except BaseException as e:
         msg = "Anomalous error while running episodes:"
         logger.error(msg, e=traceback.format_exc())
