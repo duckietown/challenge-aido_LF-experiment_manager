@@ -237,7 +237,8 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                 robot_ci.write_topic_and_expect_zero("seed", config.seed)
             except RemoteNodeAborted as e:
                 se = traceback.format_exc()
-                if "CUDA error: out of memory" in se:
+
+                if any(_ in se.lower() for _ in ["CUDA", "gpu", "out of memory"]):
                     msg = f"Detected out of CUDA memory:\n\n{se}"
                     raise InvalidEnvironment(msg) from e
                 raise InvalidSubmission(msg) from e
