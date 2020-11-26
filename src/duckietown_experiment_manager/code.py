@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import cast, Dict, Iterator, List, Optional, Set
 
 import numpy as np
+import stopit
 import yaml
 from zuper_commons.fs import locate_files, read_ustring_from_utf8_file, write_ustring_to_utf8_file
 from zuper_commons.types import ZException, ZValueError
@@ -18,7 +19,7 @@ from zuper_nodes import RemoteNodeAborted
 from zuper_nodes_wrapper.struct import MsgReceived
 from zuper_nodes_wrapper.wrapper_outside import ComponentInterface
 from zuper_typing import can_be_used_as2
-import stopit
+
 import duckietown_challenges as dc
 from aido_analyze.utils_drawing import read_and_draw
 from aido_analyze.utils_video import make_video2, make_video_ui_image
@@ -153,9 +154,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
     # episode = episodes[0]
 
     msg = "Obtained episodes. Now initializing agents com."
-    logger.debug(
-        msg, all_player_robots=all_player_robots, all_controlled_robots=all_controlled_robots,
-    )
+    logger.debug(msg, all_player_robots=all_player_robots, all_controlled_robots=all_controlled_robots)
     agents_cis: Dict[str, ComponentInterface] = {}
     for robot_name, p in all_controlled_robots.items():
         fifo_in = os.path.join(config.fifo_dir, robot_name + "-in")
@@ -168,9 +167,8 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         else:
             raise NotImplementedError(p)
         # first open all fifos
-        logger.info(
-            f"Initializing agent", robot_name=robot_name, fifo_in=fifo_in, fifo_out=fifo_out, protocol=p
-        )
+        msg = f"Initializing agent"
+        logger.info(msg, robot_name=robot_name, fifo_in=fifo_in, fifo_out=fifo_out, protocol=p)
         with stopit.SignalTimeout(config.timeout_regular) as st:
             aci = ComponentInterface(
                 fifo_in,
@@ -182,9 +180,8 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         if not st:
             msg = f"Timeout during connection to {robot_name}: {st}"
             raise InvalidSubmission(msg)
-        logger.debug(
-            f"Getting agent protocol", robot_name=robot_name, fifo_in=fifo_in, fifo_out=fifo_out, protocol=p
-        )
+        msg = f"Getting agent protocol"
+        logger.debug(msg, robot_name=robot_name, fifo_in=fifo_in, fifo_out=fifo_out, protocol=p)
 
         try:
             # noinspection PyProtectedMember
@@ -259,7 +256,8 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
             if os.path.exists(dn_final):
                 shutil.rmtree(dn_final)
 
-            dn = os.path.join(log_dir, episode_name + f".attempt{attempt_i}")
+            # dn = os.path.join(log_dir, episode_name + f".attempt{attempt_i}")
+            dn = os.path.join(log_dir, episode_name)  #
             if os.path.exists(dn):
                 shutil.rmtree(dn)
 
@@ -346,8 +344,8 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                 logger.info(f"{length_s:1f} s are enough")
                 episodes.pop(0)
 
-                logger.info(f"renaming {dn} -> {dn_final}")
-                os.rename(dn, dn_final)
+                # logger.info(f"renaming {dn} -> {dn_final}")
+                # os.rename(dn, dn_final)
             else:
                 msg = f"episode too short with {length_s:1f} s < {config.min_episode_length_s:.1f} s"
                 logger.error(msg)
@@ -372,6 +370,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         msg = "Could not find stats."
         logger.error(msg)
         raise InvalidEvaluator(msg, stats=stats, per_episode=per_episode)
+
     cie.set_score("per-episodes", per_episode)
 
     for k in list(stats):
