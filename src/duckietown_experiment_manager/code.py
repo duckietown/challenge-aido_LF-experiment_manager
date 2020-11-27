@@ -13,7 +13,6 @@ import cv2
 import numpy as np
 import stopit
 import yaml
-
 from zuper_commons.fs import locate_files, read_ustring_from_utf8_file, write_ustring_to_utf8_file
 from zuper_commons.types import ZException, ZValueError
 from zuper_ipce import ipce_from_object, object_from_ipce
@@ -312,22 +311,8 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                     subprocess.check_call(["./makegif.sh", output_video, output_gif])
 
                 # looks like if we load them before, procgraph does something funny
-                from procgraph_pil import imread, imwrite
-
-                banner_bottom_template = "banner_bottom_template.png"
-                rgb = imread(banner_bottom_template)
-
-                font = cv2.FONT_HERSHEY_COMPLEX
-                submitter_name = os.environ[ENV_SUBMITTER_NAME]
-                submission_id = os.environ[ENV_SUBMISSION_ID]
-                challenge_name = os.environ[ENV_CHALLENGE_NAME]
-                s = f"submission {submission_id}\nuser {submitter_name}\n{challenge_name}"
-
-                cv2.putText(rgb, s, (5, 20), font, 3, (0, 0, 0), 2, cv2.LINE_AA)
-
                 banner_bottom_fn = "banner_bottom.png"
-                imwrite(rgb, banner_bottom_fn)
-
+                get_banner_bottom(banner_bottom_fn)
                 for pc_name in episode_spec.scenario.player_robots:
                     dn_i = os.path.join(dn, pc_name)
                     with notice_thread("Visualization", 2):
@@ -706,3 +691,83 @@ def env_as_yaml(name: str) -> dict:
     except Exception as e:
         msg = f"Could not load YAML."
         raise ZException(msg, v=v) from e
+
+
+def get_banner_bottom(banner_bottom_fn: str):
+    from procgraph_pil import imread, imwrite
+
+    banner_bottom_template = "banner_bottom_template.png"
+    rgb = imread(banner_bottom_template)
+
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    submitter_name = os.environ[ENV_SUBMITTER_NAME]
+    submission_id = os.environ[ENV_SUBMISSION_ID]
+    challenge_name = os.environ[ENV_CHALLENGE_NAME]
+    s = f"{submitter_name}\nchallenge {challenge_name}\nsubmission {submission_id}"
+
+    color = (0, 0, 0)
+    draw_text(
+        rgb,
+        text=s,
+        uv_top_left=(10, 10),
+        color=color,
+        outline_color=None,
+        fontFace=font,
+        fontScale=0.8,
+        line_spacing=1.7,
+        thickness=1,
+    )
+
+    # cv2.putText(rgb, f"submission {submission_id}", (5, H), font, font_scale, (0, 0, 0), 1, cv2.LINE_AA)
+
+    imwrite(rgb, banner_bottom_fn)
+
+
+def draw_text(
+    img,
+    *,
+    text,
+    uv_top_left,
+    color=(255, 255, 255),
+    fontScale=0.5,
+    thickness=1,
+    fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+    outline_color=(0, 0, 0),
+    line_spacing=1.5,
+):
+    """
+    Draws multiline with an outline.
+    """
+    assert isinstance(text, str)
+
+    uv_top_left = np.array(uv_top_left, dtype=float)
+    assert uv_top_left.shape == (2,)
+
+    for line in text.splitlines():
+        (w, h), _ = cv2.getTextSize(text=line, fontFace=fontFace, fontScale=fontScale, thickness=thickness,)
+        uv_bottom_left_i = uv_top_left + [0, h]
+        org = tuple(uv_bottom_left_i.astype(int))
+
+        if outline_color is not None:
+            cv2.putText(
+                img,
+                text=line,
+                org=org,
+                fontFace=fontFace,
+                fontScale=fontScale,
+                color=outline_color,
+                thickness=thickness * 3,
+                lineType=cv2.LINE_AA,
+            )
+        cv2.putText(
+            img,
+            text=line,
+            org=org,
+            fontFace=fontFace,
+            fontScale=fontScale,
+            color=color,
+            thickness=thickness,
+            lineType=cv2.LINE_AA,
+        )
+
+        uv_top_left += [0, h * line_spacing]
