@@ -7,6 +7,7 @@ import subprocess
 import traceback
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass
+from tempfile import NamedTemporaryFile
 from typing import cast, Dict, Iterator, List, Optional, Set
 
 import cv2
@@ -307,47 +308,48 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                     output_video = os.path.join(dn, "ui_image.mp4")
                     output_gif = os.path.join(dn, "ui_image.gif")
                     make_video_ui_image(log_filename=fn, output_video=output_video)
-
                     subprocess.check_call(["./makegif.sh", output_video, output_gif])
 
                 # looks like if we load them before, procgraph does something funny
-                banner_bottom_fn = "banner_bottom.png"
-                get_banner_bottom(banner_bottom_fn)
-                for pc_name in episode_spec.scenario.player_robots:
-                    dn_i = os.path.join(dn, pc_name)
-                    with notice_thread("Visualization", 2):
-                        evaluated = read_and_draw(fn, dn_i, pc_name)
+                with NamedTemporaryFile(suffix=".png") as f:
+                    banner_bottom_fn = f.name
 
-                    out_video = os.path.join(dn_i, "camera.mp4")
-                    out_gif = os.path.join(dn_i, "camera.gif")
-                    with notice_thread("Make video", 2):
-                        # make_video1(log_filename=fn, output_video=out_video, robot_name=pc_name)
-                        make_video2(
-                            log_filename=fn,
-                            output_video=out_video,
-                            robot_name=pc_name,
-                            banner_image="banner1.png",
-                            banner_image_bottom=banner_bottom_fn,
-                        )
-                        subprocess.check_call(["./makegif.sh", out_video, out_gif])
+                    get_banner_bottom(banner_bottom_fn)
+                    for pc_name in episode_spec.scenario.player_robots:
+                        dn_i = os.path.join(dn, pc_name)
+                        with notice_thread("Visualization", 2):
+                            evaluated = read_and_draw(fn, dn_i, pc_name)
 
-                    if len(evaluated) == 0:
-                        msg = "Empty evaluated"
-                        raise ZValueError(msg)
+                        out_video = os.path.join(dn_i, "camera.mp4")
+                        out_gif = os.path.join(dn_i, "camera.gif")
+                        with notice_thread("Make video", 2):
+                            # make_video1(log_filename=fn, output_video=out_video, robot_name=pc_name)
+                            make_video2(
+                                log_filename=fn,
+                                output_video=out_video,
+                                robot_name=pc_name,
+                                banner_image="banner1.png",
+                                banner_image_bottom=banner_bottom_fn,
+                            )
+                            subprocess.check_call(["./makegif.sh", out_video, out_gif])
 
-                    stats = {}
-                    for k, evr in evaluated.items():
-                        assert isinstance(evr, RuleEvaluationResult)
-                        for m, em in evr.metrics.items():
-                            assert isinstance(em, EvaluatedMetric)
-                            assert isinstance(m, tuple)
-                            if m:
-                                M = "/".join(m)
-                            else:
-                                M = k
-                            stats[M] = float(em.total)
-                    per_episode[episode_name + "-" + pc_name] = stats
-                    logger.info(episode_name=episode_name, pc_name=pc_name, stats=stats)
+                        if len(evaluated) == 0:
+                            msg = "Empty evaluated"
+                            raise ZValueError(msg)
+
+                        stats = {}
+                        for k, evr in evaluated.items():
+                            assert isinstance(evr, RuleEvaluationResult)
+                            for m, em in evr.metrics.items():
+                                assert isinstance(em, EvaluatedMetric)
+                                assert isinstance(m, tuple)
+                                if m:
+                                    M = "/".join(m)
+                                else:
+                                    M = k
+                                stats[M] = float(em.total)
+                        per_episode[episode_name + "-" + pc_name] = stats
+                        logger.info(episode_name=episode_name, pc_name=pc_name, stats=stats)
 
             if length_s >= config.min_episode_length_s:
                 logger.info(f"{length_s:1f} s are enough")
