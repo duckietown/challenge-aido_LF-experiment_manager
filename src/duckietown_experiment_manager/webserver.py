@@ -68,7 +68,8 @@ class ImageWebServer:
 
 
         """
-        for image_name in self.name2sub2queue:
+        sorted_images = sorted(self.name2sub2queue)
+        for image_name in sorted_images:
             response += f'\n<img width="320" src="/image?image={image_name}"/>'
 
         response += "</body></html>"

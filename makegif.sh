@@ -1,7 +1,7 @@
 #!/bin/bash
 input=$1
 tmp1=$1.tmp.mp4
-palette=$1.palette.png
+palette=$1.palette.tmp.png
 output=$2
 
 

@@ -1,6 +1,6 @@
 import asyncio
 import functools
-import json
+import gc
 import os
 import shutil
 import subprocess
@@ -9,9 +9,11 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import cast, Dict, Iterator, List, Optional, Set
 
+import cv2
 import numpy as np
 import stopit
 import yaml
+
 from zuper_commons.fs import locate_files, read_ustring_from_utf8_file, write_ustring_to_utf8_file
 from zuper_commons.types import ZException, ZValueError
 from zuper_ipce import ipce_from_object, object_from_ipce
@@ -40,6 +42,7 @@ from aido_schemas import (
     PROTOCOL_NORMAL,
     protocol_scenario_maker,
     protocol_simulator_DB20,
+    ProtocolDesc,
     RobotName,
     RobotObservations,
     RobotPerformance,
@@ -55,6 +58,9 @@ from aido_schemas import (
 from aido_schemas.utils import TimeTracker
 from duckietown_challenges import (
     ChallengeInterfaceEvaluator,
+    ENV_CHALLENGE_NAME,
+    ENV_SUBMISSION_ID,
+    ENV_SUBMITTER_NAME,
     InvalidEnvironment,
     InvalidEvaluator,
     InvalidSubmission,
@@ -305,6 +311,23 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
 
                     subprocess.check_call(["./makegif.sh", output_video, output_gif])
 
+                # looks like if we load them before, procgraph does something funny
+                from procgraph_pil import imread, imwrite
+
+                banner_bottom_template = "banner_bottom_template.png"
+                rgb = imread(banner_bottom_template)
+
+                font = cv2.FONT_HERSHEY_COMPLEX
+                submitter_name = os.environ[ENV_SUBMITTER_NAME]
+                submission_id = os.environ[ENV_SUBMISSION_ID]
+                challenge_name = os.environ[ENV_CHALLENGE_NAME]
+                s = f"submission {submission_id}\nuser {submitter_name}\n{challenge_name}"
+
+                cv2.putText(rgb, s, (5, 20), font, 3, (0, 0, 0), 2, cv2.LINE_AA)
+
+                banner_bottom_fn = "banner_bottom.png"
+                imwrite(rgb, banner_bottom_fn)
+
                 for pc_name in episode_spec.scenario.player_robots:
                     dn_i = os.path.join(dn, pc_name)
                     with notice_thread("Visualization", 2):
@@ -319,6 +342,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                             output_video=out_video,
                             robot_name=pc_name,
                             banner_image="banner1.png",
+                            banner_image_bottom=banner_bottom_fn,
                         )
                         subprocess.check_call(["./makegif.sh", out_video, out_gif])
 
@@ -395,7 +419,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
 
 async def run_episode(
     sim_ci: ComponentInterface,
-    agents_cis: Dict[str, ComponentInterface],
+    agents_cis: Dict[RobotName, ComponentInterface],
     physics_dt: float,
     episode_name: str,
     scenario: Scenario,
@@ -410,7 +434,7 @@ async def run_episode(
     # set map data
     sim_ci.write_topic_and_expect_zero("set_map", SetMap(map_data=scenario.environment))
 
-    controlled_robots: Dict[RobotName, str] = {}  # protocol
+    controlled_robots: Dict[RobotName, ProtocolDesc] = {}  # protocol
 
     # spawn robot
     for robot_name, robot_conf in scenario.robots.items():
@@ -425,10 +449,8 @@ async def run_episode(
         )
         sim_ci.write_topic_and_expect_zero("spawn_robot", sp)
     for duckie_name, duckie_config in scenario.duckies.items():
-        sim_ci.write_topic_and_expect_zero(
-            "spawn_duckie",
-            SpawnDuckie(name=duckie_name, color=duckie_config.color, pose=duckie_config.pose,),
-        )
+        sp = SpawnDuckie(name=duckie_name, color=duckie_config.color, pose=duckie_config.pose,)
+        sim_ci.write_topic_and_expect_zero("spawn_duckie", sp)
 
     # start episode
     sim_ci.write_topic_and_expect_zero("episode_start", EpisodeStart(episode_name))
@@ -574,6 +596,8 @@ async def run_episode(
                 await asyncio.sleep(0.05)
             log_timing_info(tt, sim_ci)
 
+            gc.collect()
+
     return current_sim_time
 
 
@@ -635,9 +659,8 @@ def get_episodes_from_dirs(dirs: List[str]) -> List[EpisodeSpec]:
             raise ZValueError("dir does not exist", d=d)
         filenames = locate_files(d, pattern)
         if not filenames:
-            raise ZValueError(
-                "No files found in directory", d=d, pattern=pattern, all_files=locate_files(d, "*.*")
-            )
+            msg = "No files found in directory"
+            raise ZValueError(msg, d=d, pattern=pattern, all_files=locate_files(d, "*.*"))
         for f in filenames:
             dn = os.path.dirname(f)
             episode_name = os.path.basename(dn)
@@ -675,11 +698,11 @@ def get_episodes(sm_ci: ComponentInterface, episodes_per_scenario: int, seed: in
 def env_as_yaml(name: str) -> dict:
     environment = os.environ.copy()
     if not name in environment:
-        msg = f'Could not find variable "{name}"; I know:\n{json.dumps(environment, indent=4)}'
-        raise Exception(msg)
+        msg = f'Could not find variable "{name}".'
+        raise ZValueError(msg, environment=dict(environment))
     v = environment[name]
     try:
         return yaml.load(v, Loader=yaml.SafeLoader)
     except Exception as e:
-        msg = f"Could not load YAML: {e}\n\n{v}"
-        raise Exception(msg)
+        msg = f"Could not load YAML."
+        raise ZException(msg, v=v) from e
