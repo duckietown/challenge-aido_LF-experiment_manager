@@ -120,6 +120,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
     check_existence_runner_file()
 
     if config.do_webserver:
+        logger.debug("Running webserver")
         webserver = ImageWebServer(address="0.0.0.0", port=config.port)
         await asyncio.create_task(webserver.init())
     else:
@@ -129,6 +130,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         logger.info("using fixed scenarios")
         episodes = get_episodes_from_dirs(config.scenarios)
     else:
+        logger.info("using scenario maker")
         sm_ci = ComponentInterface(
             config.sm_in,
             config.sm_out,

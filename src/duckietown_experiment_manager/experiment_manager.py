@@ -61,7 +61,7 @@ def go(args=None):
 
     from zuper_nodes_wrapper import logger as zuper_nodes_wrapper_logger
 
-    zuper_nodes_wrapper_logger.setLevel(logging.INFO)
+    # zuper_nodes_wrapper_logger.setLevel(logging.INFO)
 
     with dc.scoring_context() as cie:
         try:
