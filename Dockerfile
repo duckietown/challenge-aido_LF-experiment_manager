@@ -32,5 +32,5 @@ RUN pip install . --no-deps
 RUN pip3 list
 
 RUN dt-experiment-manager --help
-
+RUN ls -al *png
 ENTRYPOINT dt-experiment-manager
