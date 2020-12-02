@@ -117,7 +117,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
     config = cast(MyConfig, object_from_ipce(config_, MyConfig))
     logger.info(config_yaml=config_, config_parsed=config)
 
-    check_existence_runner_file()
+    # check_existence_runner_file()
 
     if config.do_webserver:
         logger.debug("Running webserver")

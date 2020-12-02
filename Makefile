@@ -10,7 +10,7 @@ push: build
 upload: # v3
 	dts build_utils check-not-dirty
 	dts build_utils check-tagged
-	dt-check-need-upload --package duckietown-gym-daffy make upload-do
+	dts build_utils check-need-upload --package duckietown-gym-daffy make upload-do
 
 upload-do:
 	rm -rf src/*.egg-info
@@ -21,7 +21,7 @@ upload-do:
 upload: # v3
 	dts build_utils check-not-dirty
 	dts build_utils check-tagged
-	dt-check-need-upload --package duckietown-experiment-manager-daffy make upload-do
+	dts build_utils check-need-upload --package duckietown-experiment-manager-daffy make upload-do
 
 upload-do:
 	rm -f dist/*
