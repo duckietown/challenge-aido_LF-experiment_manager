@@ -5,6 +5,9 @@ aido-protocols-daffy
 aido-analyze-daffy
 duckietown-world-daffy
 duckietown-challenges-daffy
+zuper-nodes-z6
+zuper-ipce-z6
+zuper-commons-z6
 # those are needed later anyway, we optimize a bit
 #
 # beautifulsoup4 # opt
