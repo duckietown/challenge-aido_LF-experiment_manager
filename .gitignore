@@ -4,3 +4,5 @@ log.json
 *resolved
 banner_bottom.png
 banner_bottom_test.png
+dist
+src/duckietown_experiment_manager_daffy.egg-info
