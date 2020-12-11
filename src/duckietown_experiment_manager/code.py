@@ -354,13 +354,13 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                         logger.info(episode_name=episode_name, pc_name=pc_name, stats=stats)
 
             if length_s >= config.min_episode_length_s:
-                logger.info(f"{length_s:1f} s are enough")
+                logger.info(f"{length_s:.1f} s are enough")
                 episodes.pop(0)
 
                 # logger.info(f"renaming {dn} -> {dn_final}")
                 # os.rename(dn, dn_final)
             else:
-                msg = f"episode too short with {length_s:1f} s < {config.min_episode_length_s:.1f} s"
+                msg = f"episode too short with {length_s:.2f} s < {config.min_episode_length_s:.2f} s"
                 logger.error(msg)
 
                 nfailures += 1
