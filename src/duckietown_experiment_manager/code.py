@@ -16,7 +16,7 @@ import stopit
 import yaml
 from zuper_commons.fs import locate_files, read_ustring_from_utf8_file, write_ustring_to_utf8_file
 from zuper_commons.types import ZException, ZValueError
-from zuper_ipce import ipce_from_object, object_from_ipce
+from zuper_ipce import IESO, ipce_from_object, object_from_ipce
 from zuper_nodes import RemoteNodeAborted
 from zuper_nodes_wrapper.struct import MsgReceived
 from zuper_nodes_wrapper.wrapper_outside import ComponentInterface
@@ -567,7 +567,7 @@ async def run_episode(
                             raise dc.InvalidSubmission(msg) from e
 
                     with tt.measure("set_robot_commands"):
-                        set_robot_commands = SetRobotCommands(agent_name, t_effective, r.data,)
+                        set_robot_commands = SetRobotCommands(agent_name, t_effective, r.data)
                         f = P(sim_ci.write_topic_and_expect_zero, "set_robot_commands", set_robot_commands,)
                         await loop.run_in_executor(executor, f)
 
@@ -591,7 +591,8 @@ async def run_episode(
 
 
 def log_timing_info(tt, sim_ci: ComponentInterface):
-    ipce = ipce_from_object(tt)
+    ieso = IESO(with_schema=False)
+    ipce = ipce_from_object(tt, ieso=ieso)
     msg = {"compat": ["aido2"], "topic": "timing_information", "data": ipce}
     # noinspection PyProtectedMember
     j = sim_ci._serialize(msg)
