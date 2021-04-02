@@ -13,4 +13,4 @@ zuper-commons-z6
 # beautifulsoup4 # opt
 # compmake-z6 # opt
 procgraph-z6>=6.1.0
-PyGeometry-z6
+# PyGeometry-z6

@@ -21,20 +21,24 @@ fversion = get_version(filename="src/duckietown_experiment_manager/__init__.py")
 
 line = "daffy"
 install_requires = [
-    f"duckietown-gym-{line}",
-    f"aido-agents-{line}",
+    # f"duckietown-gym-{line}",
+    # f"aido-agents-{line}",
     "multidict",
     "aiohttp",
-    "requests",
-    "py-multihash",
-    "py-cid",
+    # "py-multihash",
+    # "py-cid",
     "pytz",
+    "zuper-nodes-z6",
+    "zuper-ipce-z6",
+    "zuper-typing-z6",
+    "numpy",
+    "PyYAML",
     f"aido-protocols-{line}",
     f"aido-analyze-{line}",
     f"duckietown-world-{line}",
     f"duckietown-challenges-{line}",
     "procgraph-z6",
-    "PyGeometry-z6",
+    # "PyGeometry-z6",
 ]
 
 setup(
