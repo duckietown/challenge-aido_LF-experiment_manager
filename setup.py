@@ -38,6 +38,7 @@ install_requires = [
     f"duckietown-world-{line}",
     f"duckietown-challenges-{line}",
     "procgraph-z6",
+    "stopit",
     # "PyGeometry-z6",
 ]
 

@@ -59,7 +59,7 @@ def go(args=None):
 
     aido_analyze_logger.setLevel(logging.INFO)
 
-    from zuper_nodes_wrapper import logger as zuper_nodes_wrapper_logger
+    # from zuper_nodes_wrapper import logger as zuper_nodes_wrapper_logger
 
     # zuper_nodes_wrapper_logger.setLevel(logging.INFO)
 
