@@ -64,6 +64,7 @@ from duckietown_challenges import (
     InvalidEnvironment,
     InvalidEvaluator,
     InvalidSubmission,
+    json,
 )
 from duckietown_world.rules import RuleEvaluationResult
 from duckietown_world.rules.rule import EvaluatedMetric
@@ -113,10 +114,22 @@ def check_existence_runner_file():
 
 
 async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
+    LOGLEVEL = os.environ.get("LOGLEVEL", "DEBUG").upper()
+    logger.setLevel(LOGLEVEL)
+
     config_ = env_as_yaml("experiment_manager_parameters")
     config = cast(MyConfig, object_from_ipce(config_, MyConfig))
     logger.info(config_yaml=config_, config_parsed=config)
 
+    if "replica" in os.environ:
+        replica = json.loads(os.environ["replica"])
+        index = replica["index"]
+        total = replica["total"]
+    else:
+        index = 0
+        total = 1
+
+    logger.info(env=dict(os.environ), index=index, total=total)
     # check_existence_runner_file()
 
     if config.do_webserver:
@@ -128,7 +141,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
 
     if config.scenarios:
         logger.info("using fixed scenarios")
-        episodes = get_episodes_from_dirs(config.scenarios)
+        episodes0 = get_episodes_from_dirs(config.scenarios)
     else:
         logger.info("using scenario maker")
         sm_ci = ComponentInterface(
@@ -141,8 +154,15 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
 
         # noinspection PyProtectedMember
         sm_ci._get_node_protocol(timeout=config.timeout_initialization)
-        episodes = get_episodes(sm_ci, episodes_per_scenario=config.episodes_per_scenario, seed=config.seed)
+        episodes0 = get_episodes(sm_ci, episodes_per_scenario=config.episodes_per_scenario, seed=config.seed)
 
+    episodes = []
+    for i, e in enumerate(episodes0):
+        if i % total == index:
+            logger.info(f"doing episode #{i} ({index}/{total})")
+            episodes.append(e)
+        else:
+            logger.info(f"skipping episode #{i} ({index}/{total})")
     all_player_robots: Set[RobotName] = set()
     all_controlled_robots: Dict[RobotName, str] = {}
     for episode_ in episodes:
