@@ -163,6 +163,12 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
             episodes.append(e)
         else:
             logger.info(f"skipping episode #{i} ({index}/{total})")
+
+    if not episodes:
+        msg = "No episodes to do for me"
+        logger.warn(msg)
+        cie.set_score("skipped", 1)
+        return
     all_player_robots: Set[RobotName] = set()
     all_controlled_robots: Dict[RobotName, str] = {}
     for episode_ in episodes:
