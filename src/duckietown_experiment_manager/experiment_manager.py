@@ -8,11 +8,10 @@ import traceback
 
 from zuper_nodes import RemoteNodeAborted
 
+import duckietown_challenges as dc
 from .code import main
 
 P = functools.partial
-
-import duckietown_challenges as dc
 
 __all__ = ["go"]
 
@@ -45,9 +44,6 @@ def wrap(cie: dc.ChallengeInterfaceEvaluator) -> None:
 
 def go(args=None):
     parser = argparse.ArgumentParser()
-    # parser.add_argument("--env-name", default=None)
-    # parser.add_argument("--map-name", default="udem1")
-    # parser.add_argument("--no-pause", action="store_true", help="don't pause on failure")
     parsed = parser.parse_args(args)
 
     import logging
@@ -58,10 +54,6 @@ def go(args=None):
     from aido_analyze import logger as aido_analyze_logger
 
     aido_analyze_logger.setLevel(logging.INFO)
-
-    # from zuper_nodes_wrapper import logger as zuper_nodes_wrapper_logger
-
-    # zuper_nodes_wrapper_logger.setLevel(logging.INFO)
 
     with dc.scoring_context() as cie:
         try:

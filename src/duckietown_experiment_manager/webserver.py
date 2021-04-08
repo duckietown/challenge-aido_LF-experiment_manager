@@ -63,14 +63,18 @@ class ImageWebServer:
         response = """
 
         <html>
-        <head></head>
+        <head>
+            <title>Simulation view</title>
+        </head>
         <body>
 
 
         """
+
         sorted_images = sorted(self.name2sub2queue)
         for image_name in sorted_images:
             response += f'\n<img width="320" src="/image?image={image_name}"/>'
-
+        if not sorted_images:
+            response += "<p> No images available yet. Refresh in a few seconds. </p>"
         response += "</body></html>"
         return web.Response(text=response, content_type="text/html")
