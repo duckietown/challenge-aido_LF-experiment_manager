@@ -467,11 +467,12 @@ async def run_episode(
         sp = SpawnDuckie(name=duckie_name, color=duckie_config.color, pose=duckie_config.pose,)
         sim_ci.write_topic_and_expect_zero("spawn_duckie", sp)
 
+    episode_start = EpisodeStart(episode_name, yaml_payload=scenario.payload_yaml)
     # start episode
-    sim_ci.write_topic_and_expect_zero("episode_start", EpisodeStart(episode_name))
+    sim_ci.write_topic_and_expect_zero("episode_start", episode_start)
 
     for _, agent_ci in agents_cis.items():
-        agent_ci.write_topic_and_expect_zero("episode_start", EpisodeStart(episode_name))
+        agent_ci.write_topic_and_expect_zero("episode_start", episode_start)
 
     current_sim_time: float = 0.0
     steps: int = 0
@@ -682,6 +683,7 @@ def get_episodes_from_dirs(dirs: List[str]) -> List[EpisodeSpec]:
             episode_name = os.path.basename(dn)
             config_ = yaml.load(read_ustring_from_utf8_file(f), Loader=yaml.Loader)
             scenario = cast(Scenario, object_from_ipce(config_, Scenario))
+            payload_yaml = "null"
             episode_spec = EpisodeSpec(episode_name, scenario)
             episodes.append(episode_spec)
 
