@@ -27,6 +27,7 @@ class ImageWebServer:
         app.router.add_route("GET", "/", self.index)
         app.router.add_route("GET", "/image", self.mjpeg_handler)
         loop = asyncio.get_event_loop()
+        # noinspection PyUnresolvedReferences
         await loop.create_server(app.make_handler(), self.address, self.port)
 
     async def mjpeg_handler(self, request: Request):

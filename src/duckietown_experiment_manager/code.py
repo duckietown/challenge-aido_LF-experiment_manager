@@ -14,6 +14,7 @@ import cv2
 import numpy as np
 import stopit
 import yaml
+from geometry import se2_from_linear_angular, SE2_from_translation_angle, SE2value, se2value
 from zuper_commons.fs import locate_files, read_ustring_from_utf8_file, write_ustring_to_utf8_file
 from zuper_commons.types import ZException, ZValueError
 from zuper_ipce import IESO, ipce_from_object, object_from_ipce
@@ -31,6 +32,8 @@ from aido_schemas import (
     DTSimStateDump,
     DumpState,
     EpisodeStart,
+    FriendlyPose,
+    FriendlyVelocity,
     GetCommands,
     GetDuckieState,
     GetRobotObservations,
@@ -432,6 +435,14 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         cie.set_score(f"{k}_max", float(np.max(values)))
 
 
+def pose_from_friendly(p: FriendlyPose) -> SE2value:
+    return SE2_from_translation_angle([p.x, p.y], np.deg2rad(p.theta_deg))
+
+
+def vel_from_friendly(p: FriendlyVelocity) -> se2value:
+    return se2_from_linear_angular([p.x, p.y], np.deg2rad(p.theta_deg))
+
+
 async def run_episode(
     sim_ci: ComponentInterface,
     agents_cis: Dict[RobotName, ComponentInterface],
@@ -464,7 +475,7 @@ async def run_episode(
         )
         sim_ci.write_topic_and_expect_zero("spawn_robot", sp)
     for duckie_name, duckie_config in scenario.duckies.items():
-        sp = SpawnDuckie(name=duckie_name, color=duckie_config.color, pose=duckie_config.pose,)
+        sp = SpawnDuckie(name=duckie_name, color=duckie_config.color, pose=duckie_config.pose)
         sim_ci.write_topic_and_expect_zero("spawn_duckie", sp)
 
     episode_start = EpisodeStart(episode_name, yaml_payload=scenario.payload_yaml)
@@ -683,7 +694,6 @@ def get_episodes_from_dirs(dirs: List[str]) -> List[EpisodeSpec]:
             episode_name = os.path.basename(dn)
             config_ = yaml.load(read_ustring_from_utf8_file(f), Loader=yaml.Loader)
             scenario = cast(Scenario, object_from_ipce(config_, Scenario))
-            payload_yaml = "null"
             episode_spec = EpisodeSpec(episode_name, scenario)
             episodes.append(episode_spec)
 
