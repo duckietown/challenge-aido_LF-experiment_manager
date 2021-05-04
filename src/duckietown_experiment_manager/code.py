@@ -1,6 +1,7 @@
 import asyncio
 import functools
 import gc
+import logging
 import os
 import shutil
 import subprocess
@@ -14,7 +15,6 @@ import cv2
 import numpy as np
 import stopit
 import yaml
-from geometry import se2_from_linear_angular, SE2_from_translation_angle, SE2value, se2value
 from zuper_commons.fs import locate_files, read_ustring_from_utf8_file, write_ustring_to_utf8_file
 from zuper_commons.types import ZException, ZValueError
 from zuper_ipce import IESO, ipce_from_object, object_from_ipce
@@ -32,8 +32,6 @@ from aido_schemas import (
     DTSimStateDump,
     DumpState,
     EpisodeStart,
-    FriendlyPose,
-    FriendlyVelocity,
     GetCommands,
     GetDuckieState,
     GetRobotObservations,
@@ -116,13 +114,30 @@ def check_existence_runner_file():
         raise InvalidEnvironment(msg=msg, lf=list_all_files("/fifos"))
 
 
+def set_loglevel():
+    LEVELS = {
+        "CRITICAL",
+        "FATAL",
+        "ERROR",
+        "WARN",
+        "WARNING",
+        "INFO",
+        "DEBUG",
+        "NOTSET",
+    }
+    LOGLEVEL = os.environ.get("LOGLEVEL", "INFO").upper()
+    if LOGLEVEL in LEVELS:
+        # noinspection PyTypeChecker
+        root_logger = logging.getLogger(None)
+        root_logger.setLevel(LOGLEVEL)
+
+
 async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
-    LOGLEVEL = os.environ.get("LOGLEVEL", "DEBUG").upper()
-    logger.setLevel(LOGLEVEL)
+    set_loglevel()
 
     config_ = env_as_yaml("experiment_manager_parameters")
     config = cast(MyConfig, object_from_ipce(config_, MyConfig))
-    logger.info(config_yaml=config_, config_parsed=config)
+    logger.debug(config_yaml=config_, config_parsed=config)
 
     if "replica" in os.environ:
         replica = json.loads(os.environ["replica"])
@@ -132,7 +147,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         index = 0
         total = 1
 
-    logger.info(env=dict(os.environ), index=index, total=total)
+    logger.debug(env=dict(os.environ), index=index, total=total)
     # check_existence_runner_file()
 
     if config.do_webserver:
@@ -143,10 +158,10 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         webserver = None
 
     if config.scenarios:
-        logger.info("using fixed scenarios")
+        logger.debug("using fixed scenarios")
         episodes0 = get_episodes_from_dirs(config.scenarios)
     else:
-        logger.info("using scenario maker")
+        logger.debug("using scenario maker")
         sm_ci = ComponentInterface(
             config.sm_in,
             config.sm_out,
@@ -205,7 +220,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
             raise NotImplementedError(p)
         # first open all fifos
         msg = f"Initializing agent"
-        logger.info(msg, robot_name=robot_name, fifo_in=fifo_in, fifo_out=fifo_out, protocol=p)
+        logger.debug(msg, robot_name=robot_name, fifo_in=fifo_in, fifo_out=fifo_out, protocol=p)
         with stopit.SignalTimeout(config.timeout_regular) as st:
             aci = ComponentInterface(
                 fifo_in,
@@ -233,7 +248,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
 
         agents_cis[robot_name] = aci
 
-    logger.info("Now initializing sim connection", sim_in=config.sim_in, sim_out=config.sim_out)
+    logger.debug("Now initializing sim connection", sim_in=config.sim_in, sim_out=config.sim_out)
 
     st: stopit.SignalTimeout
     with stopit.SignalTimeout(20) as st:
@@ -248,7 +263,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         msg = f"Timeout during connection: {st}"
         raise InvalidEvaluator(msg)
     try:
-        logger.info("Getting protocol for sim")
+        logger.debug("Getting protocol for sim")
 
         try:
             # noinspection PyProtectedMember
@@ -285,8 +300,6 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
 
             episode_spec = episodes[0]
             episode_name = episode_spec.episode_name
-
-            logger.info(f"Starting episode '{episode_name}'.")
 
             dn_final = os.path.join(log_dir, episode_name)
 
@@ -380,7 +393,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                                     M = k
                                 stats[M] = float(em.total)
                         per_episode[episode_name + "-" + pc_name] = stats
-                        logger.info(episode_name=episode_name, pc_name=pc_name, stats=stats)
+                        logger.debug(episode_name=episode_name, pc_name=pc_name, stats=stats)
 
             if length_s >= config.min_episode_length_s:
                 logger.info(f"{length_s:.1f} s are enough")
@@ -435,14 +448,6 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         cie.set_score(f"{k}_max", float(np.max(values)))
 
 
-def pose_from_friendly(p: FriendlyPose) -> SE2value:
-    return SE2_from_translation_angle([p.x, p.y], np.deg2rad(p.theta_deg))
-
-
-def vel_from_friendly(p: FriendlyVelocity) -> se2value:
-    return se2_from_linear_angular([p.x, p.y], np.deg2rad(p.theta_deg))
-
-
 async def run_episode(
     sim_ci: ComponentInterface,
     agents_cis: Dict[RobotName, ComponentInterface],
@@ -453,7 +458,7 @@ async def run_episode(
     config: MyConfig,
 ) -> float:
     """ returns length of episode """
-    logger.info(scenario=scenario)
+    logger.debug(scenario=scenario)
     episode_length_s = config.episode_length_s
     # clear simulation
     sim_ci.write_topic_and_expect_zero("clear")
@@ -645,8 +650,8 @@ def check_compatibility_between_agent_and_sim(agent_ci: ComponentInterface, sim_
     type_observations_sim = snp.outputs["robot_observations"].__annotations__["observations"]
     type_commands_sim = snp.inputs["set_robot_commands"].__annotations__["commands"]
 
-    logger.info(f"Simulation provides observations {type_observations_sim}")
-    logger.info(f"Simulation requires commands {type_commands_sim}")
+    logger.debug(f"Simulation provides observations {type_observations_sim}")
+    logger.debug(f"Simulation requires commands {type_commands_sim}")
 
     if agent_ci.node_protocol is None:
         msg = "Cannot check compatibility of interfaces because the agent does not implement reflection."
