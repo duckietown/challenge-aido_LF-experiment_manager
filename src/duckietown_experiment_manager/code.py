@@ -476,12 +476,16 @@ async def run_episode(
     for robot_name, robot_conf in scenario.robots.items():
         if robot_conf.controllable:
             controlled_robots[robot_name] = robot_conf.protocol
+
+        simulate_camera = robot_conf.protocol in (PROTOCOL_FULL, PROTOCOL_NORMAL)
+
         sp = SpawnRobot(
             robot_name=robot_name,
             configuration=robot_conf.configuration,
             playable=robot_conf.controllable,
             owned_by_player=robot_name in scenario.player_robots,
             color=robot_conf.color,
+            simulate_camera=simulate_camera,
         )
         sim_ci.write_topic_and_expect_zero("spawn_robot", sp)
     for duckie_name, duckie_config in scenario.duckies.items():
@@ -555,6 +559,7 @@ async def run_episode(
 
                 for agent_name in controlled_robots:
                     agent_ci = agents_cis[agent_name]
+                    pr = controlled_robots[agent_name]
                     # for agent_name, agent_ci in agents_cis.items():
 
                     with tt.measure(f"sim_compute_performance-{agent_name}"):
@@ -592,7 +597,7 @@ async def run_episode(
                     with tt.measure(f"agent_compute-{agent_name}"):
                         try:
                             map_data = cast(str, scenario.environment)
-                            pr = controlled_robots[agent_name]
+
                             if pr == PROTOCOL_FULL:
                                 obs_plus = DB20ObservationsPlusState(
                                     camera=obs.camera,
