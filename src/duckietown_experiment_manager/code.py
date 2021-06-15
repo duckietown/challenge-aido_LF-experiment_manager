@@ -18,9 +18,6 @@ import yaml
 from zuper_commons.fs import locate_files, read_ustring_from_utf8_file, write_ustring_to_utf8_file
 from zuper_commons.types import ZException, ZValueError
 from zuper_ipce import IESO, ipce_from_object, object_from_ipce
-from zuper_nodes import RemoteNodeAborted
-from zuper_nodes_wrapper.struct import MsgReceived
-from zuper_nodes_wrapper.wrapper_outside import ComponentInterface
 from zuper_typing import can_be_used_as2
 
 import duckietown_challenges as dc
@@ -28,6 +25,7 @@ from aido_analyze.utils_drawing import read_and_draw
 from aido_analyze.utils_video import make_video2, make_video_ui_image
 from aido_schemas import (
     DB20Observations,
+    DB20ObservationsOnlyState,
     DB20ObservationsPlusState,
     DTSimStateDump,
     DumpState,
@@ -39,6 +37,7 @@ from aido_schemas import (
     JPGImage,
     protocol_agent_DB20,
     protocol_agent_DB20_fullstate,
+    protocol_agent_DB20_onlystate,
     PROTOCOL_FULL,
     PROTOCOL_NORMAL,
     protocol_scenario_maker,
@@ -56,6 +55,7 @@ from aido_schemas import (
     SpawnRobot,
     Step,
 )
+from aido_schemas.protocol_simulator import PROTOCOL_STATE
 from aido_schemas.utils import TimeTracker
 from duckietown_challenges import (
     ChallengeInterfaceEvaluator,
@@ -69,6 +69,9 @@ from duckietown_challenges import (
 )
 from duckietown_world.rules import RuleEvaluationResult
 from duckietown_world.rules.rule import EvaluatedMetric
+from zuper_nodes import RemoteNodeAborted
+from zuper_nodes_wrapper.struct import MsgReceived
+from zuper_nodes_wrapper.wrapper_outside import ComponentInterface
 from . import logger
 from .notice_thread import notice_thread
 from .webserver import ImageWebServer
@@ -214,6 +217,8 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
 
         if p == PROTOCOL_FULL:
             expect_protocol = protocol_agent_DB20_fullstate
+        elif p == PROTOCOL_STATE:
+            expect_protocol = protocol_agent_DB20_onlystate
         elif p == PROTOCOL_NORMAL:
             expect_protocol = protocol_agent_DB20
         else:
@@ -457,7 +462,7 @@ async def run_episode(
     webserver: Optional[ImageWebServer],
     config: MyConfig,
 ) -> float:
-    """ returns length of episode """
+    """returns length of episode"""
     logger.debug(scenario=scenario)
     episode_length_s = config.episode_length_s
     # clear simulation
@@ -563,20 +568,26 @@ async def run_episode(
                         _recv: MsgReceived[RobotPerformance] = await loop.run_in_executor(executor, f)
 
                     with tt.measure(f"sim_render-{agent_name}"):
-                        get_robot_observations = GetRobotObservations(agent_name, t_effective)
 
-                        f = P(
-                            sim_ci.write_topic_and_expect,
-                            "get_robot_observations",
-                            get_robot_observations,
-                            expect="robot_observations",
-                        )
-                        recv_observations: MsgReceived[RobotObservations]
-                        recv_observations = await loop.run_in_executor(executor, f)
-                        ro: RobotObservations = recv_observations.data
-                        obs = cast(DB20Observations, ro.observations)
-                        if webserver:
-                            await webserver.push(f"{agent_name}-camera", obs.camera.jpg_data)
+                        if pr in (PROTOCOL_FULL, PROTOCOL_STATE):
+                            get_robot_observations = GetRobotObservations(agent_name, t_effective)
+
+                            f = P(
+                                sim_ci.write_topic_and_expect,
+                                "get_robot_observations",
+                                get_robot_observations,
+                                expect="robot_observations",
+                            )
+                            recv_observations: MsgReceived[RobotObservations]
+                            recv_observations = await loop.run_in_executor(executor, f)
+                            ro: RobotObservations = recv_observations.data
+                            obs = cast(DB20Observations, ro.observations)
+                            if webserver:
+                                await webserver.push(f"{agent_name}-camera", obs.camera.jpg_data)
+                        elif pr == PROTOCOL_STATE:
+                            pass
+                        else:
+                            raise NotImplementedError(pr)
 
                     with tt.measure(f"agent_compute-{agent_name}"):
                         try:
@@ -592,6 +603,12 @@ async def run_episode(
                                 )
                             elif pr == PROTOCOL_NORMAL:
                                 obs_plus = DB20Observations(camera=obs.camera, odometry=obs.odometry)
+                            elif pr == PROTOCOL_STATE:
+                                obs_plus = DB20ObservationsOnlyState(
+                                    your_name=agent_name,
+                                    state=state_dump.data.state,
+                                    map_data=map_data,
+                                )
                             else:
                                 raise NotImplementedError(pr)
                             # logger.info("sending agent", obs_plus=obs_plus)
@@ -611,7 +628,11 @@ async def run_episode(
 
                     with tt.measure("set_robot_commands"):
                         set_robot_commands = SetRobotCommands(agent_name, t_effective, r.data)
-                        f = P(sim_ci.write_topic_and_expect_zero, "set_robot_commands", set_robot_commands,)
+                        f = P(
+                            sim_ci.write_topic_and_expect_zero,
+                            "set_robot_commands",
+                            set_robot_commands,
+                        )
                         await loop.run_in_executor(executor, f)
 
                 with tt.measure("step_physics"):
@@ -685,7 +706,7 @@ class EpisodeSpec:
 
 
 def get_episodes_from_dirs(dirs: List[str]) -> List[EpisodeSpec]:
-    pattern = "scenario.yaml"
+    pattern = "*scenario.yaml"
     episodes = []
     for d in dirs:
         if not os.path.exists:
@@ -792,7 +813,12 @@ def draw_text(
     assert uv_top_left.shape == (2,)
 
     for line in text.splitlines():
-        (w, h), _ = cv2.getTextSize(text=line, fontFace=fontFace, fontScale=fontScale, thickness=thickness,)
+        (w, h), _ = cv2.getTextSize(
+            text=line,
+            fontFace=fontFace,
+            fontScale=fontScale,
+            thickness=thickness,
+        )
         uv_bottom_left_i = uv_top_left + [0, h]
         org = tuple(uv_bottom_left_i.astype(int))
 
