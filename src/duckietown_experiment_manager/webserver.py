@@ -42,7 +42,9 @@ class ImageWebServer:
         response = web.StreamResponse(
             status=200,
             reason="OK",
-            headers={"Content-Type": "multipart/x-mixed-replace;" "boundary=%s" % my_boundary,},
+            headers={
+                "Content-Type": "multipart/x-mixed-replace;" "boundary=%s" % my_boundary,
+            },
         )
         await response.prepare(request)
 

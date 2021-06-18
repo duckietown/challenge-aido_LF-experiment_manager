@@ -50,6 +50,8 @@ setup(
     packages=["duckietown_experiment_manager"],
     install_requires=install_requires,
     entry_points={
-        "console_scripts": ["dt-experiment-manager = duckietown_experiment_manager.experiment_manager:go",],
+        "console_scripts": [
+            "dt-experiment-manager = duckietown_experiment_manager.experiment_manager:go",
+        ],
     },
 )
