@@ -41,7 +41,7 @@ from aido_schemas import (
     PROTOCOL_FULL,
     PROTOCOL_NORMAL,
     protocol_scenario_maker,
-    protocol_simulator_DB20,
+    protocol_simulator_DB20_timestamps,
     ProtocolDesc,
     RobotName,
     RobotObservations,
@@ -260,7 +260,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         sim_ci = ComponentInterface(
             config.sim_in,
             config.sim_out,
-            expect_protocol=protocol_simulator_DB20,
+            expect_protocol=protocol_simulator_DB20_timestamps,
             nickname="simulator",
             timeout=config.timeout_regular,
         )
@@ -574,7 +574,7 @@ async def run_episode(
 
                     with tt.measure(f"sim_render-{agent_name}"):
 
-                        if pr in (PROTOCOL_FULL, PROTOCOL_STATE):
+                        if pr in (PROTOCOL_FULL, PROTOCOL_NORMAL):
                             get_robot_observations = GetRobotObservations(agent_name, t_effective)
 
                             f = P(
