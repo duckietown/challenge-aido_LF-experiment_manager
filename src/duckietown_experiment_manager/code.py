@@ -6,8 +6,7 @@ import os
 import shutil
 import subprocess
 import traceback
-from concurrent.futures import ProcessPoolExecutor
-from concurrent.futures.thread import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import cast, Dict, Iterator, List, Optional, Set
 
@@ -364,7 +363,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
             banner_bottom_fn = f"/tmp/{episode_name}.png"
             get_banner_bottom(banner_bottom_fn)
 
-            with ProcessPoolExecutor(max_workers=10) as executor:
+            with ProcessPoolExecutor(max_workers=3) as executor:
                 output_video = os.path.join(dn, "ui_image.mp4")
                 output_gif = os.path.join(dn, "ui_image.gif")
                 executor.submit(ui_image_bg, fn=fn, output_video=output_video, output_gif=output_gif)
