@@ -6,9 +6,9 @@ import os
 import shutil
 import subprocess
 import traceback
+from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass
-from tempfile import NamedTemporaryFile
 from typing import cast, Dict, Iterator, List, Optional, Set
 
 import cv2
@@ -206,51 +206,54 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                 else:
                     all_controlled_robots[name] = r.protocol
     # episode = episodes[0]
+    with profiler.prof("initialize-agents"):
+        msg = "Obtained episodes. Now initializing agents com."
+        logger.debug(msg, all_player_robots=all_player_robots, all_controlled_robots=all_controlled_robots)
+        agents_cis: Dict[str, ComponentInterface] = {}
+        for robot_name, p in all_controlled_robots.items():
+            with profiler.prof(robot_name):
 
-    msg = "Obtained episodes. Now initializing agents com."
-    logger.debug(msg, all_player_robots=all_player_robots, all_controlled_robots=all_controlled_robots)
-    agents_cis: Dict[str, ComponentInterface] = {}
-    for robot_name, p in all_controlled_robots.items():
-        fifo_in = os.path.join(config.fifo_dir, robot_name + "-in")
-        fifo_out = os.path.join(config.fifo_dir, robot_name + "-out")
+                fifo_in = os.path.join(config.fifo_dir, robot_name + "-in")
+                fifo_out = os.path.join(config.fifo_dir, robot_name + "-out")
 
-        if p == PROTOCOL_FULL:
-            expect_protocol = protocol_agent_DB20_fullstate
-        elif p == PROTOCOL_STATE:
-            expect_protocol = protocol_agent_DB20_onlystate
-        elif p == PROTOCOL_NORMAL:
-            expect_protocol = protocol_agent_DB20
-        else:
-            raise NotImplementedError(p)
-        # first open all fifos
-        msg = f"Initializing agent"
-        logger.debug(msg, robot_name=robot_name, fifo_in=fifo_in, fifo_out=fifo_out, protocol=p)
-        with stopit.SignalTimeout(config.timeout_regular) as st:
-            aci = ComponentInterface(
-                fifo_in,
-                fifo_out,
-                expect_protocol=expect_protocol,
-                nickname=robot_name,
-                timeout=config.timeout_regular,
-            )
-        if not st:
-            msg = f"Timeout during connection to {robot_name}: {st}"
-            raise InvalidSubmission(msg)
-        msg = f"Getting agent protocol"
-        logger.debug(msg, robot_name=robot_name, fifo_in=fifo_in, fifo_out=fifo_out, protocol=p)
+                if p == PROTOCOL_FULL:
+                    expect_protocol = protocol_agent_DB20_fullstate
+                elif p == PROTOCOL_STATE:
+                    expect_protocol = protocol_agent_DB20_onlystate
+                elif p == PROTOCOL_NORMAL:
+                    expect_protocol = protocol_agent_DB20
+                else:
+                    raise NotImplementedError(p)
+                # first open all fifos
+                msg = f"Initializing agent"
+                logger.debug(msg, robot_name=robot_name, fifo_in=fifo_in, fifo_out=fifo_out, protocol=p)
+                with stopit.SignalTimeout(config.timeout_regular) as st:
+                    aci = ComponentInterface(
+                        fifo_in,
+                        fifo_out,
+                        expect_protocol=expect_protocol,
+                        nickname=robot_name,
+                        timeout=config.timeout_regular,
+                    )
+                if not st:
+                    msg = f"Timeout during connection to {robot_name}: {st}"
+                    raise InvalidSubmission(msg)
+                msg = f"Getting agent protocol"
+                logger.debug(msg, robot_name=robot_name, fifo_in=fifo_in, fifo_out=fifo_out, protocol=p)
 
-        try:
-            # noinspection PyProtectedMember
-            aci._get_node_protocol(timeout=config.timeout_initialization)
-        except Exception as e:
-            msg = f"Could not get protocol for agent {robot_name!r}"
-            logger.error(msg)
-            if robot_name in all_player_robots:
-                raise InvalidSubmission(msg) from e
-            elif robot_name in all_controlled_robots:
-                raise InvalidEvaluator(msg) from e
+                with profiler.prof("get-node-protocol"):
+                    try:
+                        # noinspection PyProtectedMember
+                        aci._get_node_protocol(timeout=config.timeout_initialization)
+                    except Exception as e:
+                        msg = f"Could not get protocol for agent {robot_name!r}"
+                        logger.error(msg)
+                        if robot_name in all_player_robots:
+                            raise InvalidSubmission(msg) from e
+                        elif robot_name in all_controlled_robots:
+                            raise InvalidEvaluator(msg) from e
 
-        agents_cis[robot_name] = aci
+                agents_cis[robot_name] = aci
 
     logger.debug("Now initializing sim connection", sim_in=config.sim_in, sim_out=config.sim_out)
 
@@ -269,13 +272,14 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
     try:
         logger.debug("Getting protocol for sim")
 
-        try:
-            # noinspection PyProtectedMember
-            sim_ci._get_node_protocol(timeout=config.timeout_initialization)
-        except Exception as e:
-            msg = f"Cannot get protocol for simulator."
-            logger.error(msg)
-            raise InvalidEvaluator(msg) from e
+        with profiler.prof("get_node_protocol-sim"):
+            try:
+                # noinspection PyProtectedMember
+                sim_ci._get_node_protocol(timeout=config.timeout_initialization)
+            except Exception as e:
+                msg = f"Cannot get protocol for simulator."
+                logger.error(msg)
+                raise InvalidEvaluator(msg) from e
 
         attempt_i: int = 0
         per_episode = {}
@@ -285,16 +289,17 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         logger.debug(f"Setting seed = {config.seed} for sim and agents.")
         sim_ci.write_topic_and_expect_zero("seed", config.seed)
 
-        for pcname, robot_ci in agents_cis.items():
-            try:
-                robot_ci.write_topic_and_expect_zero("seed", config.seed)
-            except RemoteNodeAborted as e:
-                se = traceback.format_exc()
+        with profiler.prof("seeding"):
+            for pcname, robot_ci in agents_cis.items():
+                try:
+                    robot_ci.write_topic_and_expect_zero("seed", config.seed)
+                except RemoteNodeAborted as e:
+                    se = traceback.format_exc()
 
-                if any(_ in se.lower() for _ in ["CUDA", "gpu", "out of memory"]):
-                    msg = f"Detected out of CUDA memory:\n\n{se}"
-                    raise InvalidEnvironment(msg) from e
-                raise InvalidSubmission(msg) from e
+                    if any(_ in se.lower() for _ in ["CUDA", "gpu", "out of memory"]):
+                        msg = f"Detected out of CUDA memory:\n\n{se}"
+                        raise InvalidEnvironment(msg) from e
+                    raise InvalidSubmission(msg) from e
 
         while episodes:
 
@@ -353,60 +358,35 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
             # output = os.path.join(dn, 'visualization')
             logger.debug("Now creating visualization and analyzing statistics.")
 
-            if length_s > 0:
-                with notice_thread("Make video", 2):
-                    output_video = os.path.join(dn, "ui_image.mp4")
-                    output_gif = os.path.join(dn, "ui_image.gif")
-                    make_video_ui_image(log_filename=fn, output_video=output_video)
-                    subprocess.check_call(["./makegif.sh", output_video, output_gif])
+            if length_s == 0:
+                continue
 
+            banner_bottom_fn = f"/tmp/{episode_name}.png"
+            get_banner_bottom(banner_bottom_fn)
+
+            with ProcessPoolExecutor(max_workers=10) as executor:
+                output_video = os.path.join(dn, "ui_image.mp4")
+                output_gif = os.path.join(dn, "ui_image.gif")
+                executor.submit(ui_image_bg, fn=fn, output_video=output_video, output_gif=output_gif)
                 # looks like if we load them before, procgraph does something funny
-                with NamedTemporaryFile(suffix=".png") as f:
-                    banner_bottom_fn = f.name
 
-                    get_banner_bottom(banner_bottom_fn)
-                    for pc_name in episode_spec.scenario.player_robots:
-                        with profiler.prof(f"robot-end"):
-                            protocol = episode_spec.scenario.robots[pc_name].protocol
+                results_stats = {}
+                for pc_name in episode_spec.scenario.player_robots:
+                    dn_i = os.path.join(dn, pc_name)
 
-                            dn_i = os.path.join(dn, pc_name)
-                            with notice_thread("Visualization", 2):
-                                with profiler.prof(f"Visualization"):
-                                    evaluated = read_and_draw(fn, dn_i, pc_name)
+                    protocol = episode_spec.scenario.robots[pc_name].protocol
+                    if protocol in (PROTOCOL_FULL, PROTOCOL_NORMAL):
+                        out_video = os.path.join(dn_i, "camera.mp4")
+                        out_gif = os.path.join(dn_i, "camera.gif")
 
-                            if len(evaluated) == 0:
-                                msg = "Empty evaluated"
-                                raise ZValueError(msg)
+                        executor.submit(ui_video2, fn, out_video, pc_name, banner_bottom_fn, out_gif)
 
-                            stats = {}
-                            for k, evr in evaluated.items():
-                                assert isinstance(evr, RuleEvaluationResult)
-                                for m, em in evr.metrics.items():
-                                    assert isinstance(em, EvaluatedMetric)
-                                    assert isinstance(m, tuple)
-                                    if m:
-                                        M = "/".join(m)
-                                    else:
-                                        M = k
-                                    stats[M] = float(em.total)
-                            per_episode[episode_name + "-" + pc_name] = stats
-                            logger.debug(episode_name=episode_name, pc_name=pc_name, stats=stats)
+                    results_stats[pc_name] = executor.submit(robot_stats, fn, dn_i, pc_name)
 
-                            if protocol in (PROTOCOL_FULL, PROTOCOL_NORMAL):
-                                out_video = os.path.join(dn_i, "camera.mp4")
-                                out_gif = os.path.join(dn_i, "camera.gif")
-                                with profiler.prof("video"):
-                                    with notice_thread("Make video", 2):
-                                        # make_video1(log_filename=fn, output_video=out_video,
-                                        # robot_name=pc_name)
-                                        make_video2(
-                                            log_filename=fn,
-                                            output_video=out_video,
-                                            robot_name=pc_name,
-                                            banner_image="banner1.png",
-                                            banner_image_bottom=banner_bottom_fn,
-                                        )
-                                        subprocess.check_call(["./makegif.sh", out_video, out_gif])
+                for pc_name, future in results_stats.items():
+                    stats = future.result()
+                    per_episode[episode_name + "-" + pc_name] = stats
+                    logger.debug(episode_name=episode_name, pc_name=pc_name, stats=stats)
 
             if length_s >= config.min_episode_length_s:
                 logger.info(f"{length_s:.1f} s are enough")
@@ -442,6 +422,8 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
             agent_ci.close()
         sim_ci.close()
 
+    logger.info(f"profile:\n {profiler.show_stats()}")
+
     stats = list(stats)
     logger.info(per_episode=per_episode, stats=stats)
     if not per_episode or not stats:
@@ -461,6 +443,48 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         cie.set_score(f"{k}_max", float(np.max(values)))
 
 
+def robot_stats(fn, dn_i, pc_name):
+    with notice_thread(f"Visualization {pc_name}", 2):
+        evaluated = read_and_draw(fn, dn_i, pc_name)
+
+    if len(evaluated) == 0:
+        msg = "Empty evaluated"
+        raise ZValueError(msg)
+
+    stats = {}
+    for k, evr in evaluated.items():
+        assert isinstance(evr, RuleEvaluationResult)
+        for m, em in evr.metrics.items():
+            assert isinstance(em, EvaluatedMetric)
+            assert isinstance(m, tuple)
+            if m:
+                M = "/".join(m)
+            else:
+                M = k
+            stats[M] = float(em.total)
+    return stats
+
+
+def ui_image_bg(fn, output_video, output_gif):
+    with notice_thread(f"ui_image_bg - make_video_ui_image", 2):
+        make_video_ui_image(log_filename=fn, output_video=output_video)
+    with notice_thread(f"ui_image_bg - makegif", 2):
+        subprocess.check_call(["./makegif.sh", output_video, output_gif])
+
+
+def ui_video2(fn, out_video, pc_name, banner_bottom_fn, out_gif):
+    with notice_thread(f"ui_video2-make_video2 {pc_name}", 2):
+        make_video2(
+            log_filename=fn,
+            output_video=out_video,
+            robot_name=pc_name,
+            banner_image="banner1.png",
+            banner_image_bottom=banner_bottom_fn,
+        )
+    with notice_thread(f"ui_video2-makegif {pc_name}", 2):
+        subprocess.check_call(["./makegif.sh", out_video, out_gif])
+
+
 async def run_episode(
     sim_ci: ComponentInterface,
     agents_cis: Dict[RobotName, ComponentInterface],
@@ -477,9 +501,11 @@ async def run_episode(
 
     with profiler.prof("reset-sim"):
         # clear simulation
-        sim_ci.write_topic_and_expect_zero("clear")
+        sim_ci.write_topic_and_expect_zero("clear", profiler=profiler)
         # set map data
-        sim_ci.write_topic_and_expect_zero("set_map", SetMap(map_data=scenario.environment))
+        sim_ci.write_topic_and_expect_zero(
+            "set_map", SetMap(map_data=scenario.environment), profiler=profiler
+        )
 
     controlled_robots: Dict[RobotName, ProtocolDesc] = {}  # protocol
 
@@ -499,18 +525,18 @@ async def run_episode(
                 color=robot_conf.color,
                 simulate_camera=simulate_camera,
             )
-            sim_ci.write_topic_and_expect_zero("spawn_robot", sp)
+            sim_ci.write_topic_and_expect_zero("spawn_robot", sp, profiler=profiler)
         for duckie_name, duckie_config in scenario.duckies.items():
             sp = SpawnDuckie(name=duckie_name, color=duckie_config.color, pose=duckie_config.pose)
-            sim_ci.write_topic_and_expect_zero("spawn_duckie", sp)
+            sim_ci.write_topic_and_expect_zero("spawn_duckie", sp, profiler=profiler)
 
     with profiler.prof("send-episode-start"):
         episode_start = EpisodeStart(episode_name, yaml_payload=scenario.payload_yaml)
         # start episode
-        sim_ci.write_topic_and_expect_zero("episode_start", episode_start)
+        sim_ci.write_topic_and_expect_zero("episode_start", episode_start, profiler=profiler)
 
         for _, agent_ci in agents_cis.items():
-            agent_ci.write_topic_and_expect_zero("episode_start", episode_start)
+            agent_ci.write_topic_and_expect_zero("episode_start", episode_start, profiler=profiler)
 
     current_sim_time: float = 0.0
     steps: int = 0
@@ -519,7 +545,7 @@ async def run_episode(
     loop = asyncio.get_event_loop()
 
     stop_at = None
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=10) as executor:
         while True:
             steps += 1
             if stop_at is not None:
@@ -536,23 +562,43 @@ async def run_episode(
             with profiler.prof("iteration"):
 
                 with profiler.prof("get_state_dump"):
-                    f = P(sim_ci.write_topic_and_expect, "dump_state", DumpState(), expect="state_dump")
+                    f = P(
+                        sim_ci.write_topic_and_expect,
+                        "dump_state",
+                        DumpState(),
+                        expect="state_dump",
+                        profiler=profiler,
+                    )
                     state_dump: MsgReceived[DTSimStateDump] = await loop.run_in_executor(executor, f)
 
                 with profiler.prof(f"get_robot_state"):
                     for robot_name in scenario.robots:
                         grs = GetRobotState(robot_name=robot_name, t_effective=t_effective)
-                        f = P(sim_ci.write_topic_and_expect, "get_robot_state", grs, expect="robot_state")
+                        f = P(
+                            sim_ci.write_topic_and_expect,
+                            "get_robot_state",
+                            grs,
+                            expect="robot_state",
+                            profiler=profiler,
+                        )
                         _recv: MsgReceived[RobotState] = await loop.run_in_executor(executor, f)
 
                 with profiler.prof(f"get_duckie_state"):
                     for duckie_name in scenario.duckies:
                         rs = GetDuckieState(duckie_name, t_effective)
-                        f = P(sim_ci.write_topic_and_expect, "get_duckie_state", rs, expect="duckie_state")
+                        f = P(
+                            sim_ci.write_topic_and_expect,
+                            "get_duckie_state",
+                            rs,
+                            expect="duckie_state",
+                            profiler=profiler,
+                        )
                         await loop.run_in_executor(executor, f)
 
                 with profiler.prof("sim_compute_sim_state"):
-                    f = P(sim_ci.write_topic_and_expect, "get_sim_state", expect="sim_state")
+                    f = P(
+                        sim_ci.write_topic_and_expect, "get_sim_state", expect="sim_state", profiler=profiler
+                    )
                     recv: MsgReceived[SimulationState] = await loop.run_in_executor(executor, f)
 
                     sim_state: SimulationState = recv.data
@@ -570,12 +616,12 @@ async def run_episode(
                             msg = f"Simulation is done. Waiting for step {stop_at} to stop."
                             logger.info(msg)
 
-                with profiler.prof("update-agents"):
+                with profiler.prof("update-agents-prep"):
                     for agent_name in controlled_robots:
+                        agent_ci = agents_cis[agent_name]
                         with profiler.prof(agent_name):
-                            agent_ci = agents_cis[agent_name]
+
                             pr = controlled_robots[agent_name]
-                            # for agent_name, agent_ci in agents_cis.items():
 
                             with profiler.prof(f"sim_compute_performance"):
                                 f = P(
@@ -583,6 +629,7 @@ async def run_episode(
                                     "get_robot_performance",
                                     agent_name,
                                     expect="robot_performance",
+                                    profiler=profiler,
                                 )
 
                                 _recv: MsgReceived[RobotPerformance] = await loop.run_in_executor(executor, f)
@@ -597,6 +644,7 @@ async def run_episode(
                                         "get_robot_observations",
                                         get_robot_observations,
                                         expect="robot_observations",
+                                        profiler=profiler,
                                     )
                                     recv_observations: MsgReceived[RobotObservations]
                                     recv_observations = await loop.run_in_executor(executor, f)
@@ -609,58 +657,78 @@ async def run_episode(
                                 else:
                                     raise NotImplementedError(pr)
 
-                            with profiler.prof(f"agent_compute"):
-                                try:
-                                    map_data = cast(str, scenario.environment)
+                            map_data = cast(str, scenario.environment)
 
-                                    if pr == PROTOCOL_FULL:
-                                        obs_plus = DB20ObservationsPlusState(
-                                            camera=obs.camera,
-                                            odometry=obs.odometry,
-                                            your_name=agent_name,
-                                            state=state_dump.data.state,
-                                            map_data=map_data,
-                                        )
-                                    elif pr == PROTOCOL_NORMAL:
-                                        obs_plus = DB20Observations(camera=obs.camera, odometry=obs.odometry)
-                                    elif pr == PROTOCOL_STATE:
-                                        obs_plus = DB20ObservationsOnlyState(
-                                            your_name=agent_name,
-                                            state=state_dump.data.state,
-                                            map_data=map_data,
-                                        )
-                                    else:
-                                        raise NotImplementedError(pr)
-                                    # logger.info("sending agent", obs_plus=obs_plus)
-                                    agent_ci.write_topic_and_expect_zero("observations", obs_plus)
-                                    get_commands = GetCommands(t_effective)
-                                    f = P(
-                                        agent_ci.write_topic_and_expect,
-                                        "get_commands",
-                                        get_commands,
-                                        expect="commands",
-                                    )
-                                    r: MsgReceived = await loop.run_in_executor(executor, f)
-                                except BaseException as e:
-                                    msg = "Trouble with communication to the agent."
-                                    raise dc.InvalidSubmission(msg) from e
+                            if pr == PROTOCOL_FULL:
+                                obs_plus = DB20ObservationsPlusState(
+                                    camera=obs.camera,
+                                    odometry=obs.odometry,
+                                    your_name=agent_name,
+                                    state=state_dump.data.state,
+                                    map_data=map_data,
+                                )
+                            elif pr == PROTOCOL_NORMAL:
+                                obs_plus = DB20Observations(camera=obs.camera, odometry=obs.odometry)
+                            elif pr == PROTOCOL_STATE:
+                                obs_plus = DB20ObservationsOnlyState(
+                                    your_name=agent_name,
+                                    state=state_dump.data.state,
+                                    map_data=map_data,
+                                )
+                            else:
+                                raise NotImplementedError(pr)
+                            with profiler.prof("send-obs"):
+                                f = P(
+                                    agent_ci.write_topic_and_expect_zero,
+                                    "observations",
+                                    obs_plus,
+                                    profiler=profiler,
+                                )
+                                await loop.run_in_executor(executor, f)
 
+                            with profiler.prof("send-get-commands"):
+                                get_commands = GetCommands(t_effective)
+                                # noinspection PyProtectedMember
+                                f = P(agent_ci._write_topic, "get_commands", get_commands)
+                                await loop.run_in_executor(executor, f)
+
+                            # results.append(agent_compute(loop, executor, agent_ci, obs_plus, t_effective))
+
+                # with profiler.prof("update-agents"):
+                #     datas = await asyncio.gather(*tuple(results))
+                with profiler.prof("send-commands"):
+                    for agent_name in controlled_robots:
+                        with profiler.prof(agent_name):
+                            agent_ci = agents_cis[agent_name]
+                            with profiler.prof("get_commands"):
+                                f = P(agent_ci.read_one, "commands", profiler=profiler)
+                                msg = await loop.run_in_executor(executor, f)
+                            cmds = msg.data
                             with profiler.prof("set_robot_commands"):
-                                set_robot_commands = SetRobotCommands(agent_name, t_effective, r.data)
+                                set_robot_commands = SetRobotCommands(agent_name, t_effective, cmds)
                                 f = P(
                                     sim_ci.write_topic_and_expect_zero,
                                     "set_robot_commands",
                                     set_robot_commands,
+                                    profiler=profiler,
                                 )
                                 await loop.run_in_executor(executor, f)
 
                 with profiler.prof("step_physics"):
                     current_sim_time += physics_dt
-                    f = P(sim_ci.write_topic_and_expect_zero, "step", Step(current_sim_time))
+                    f = P(
+                        sim_ci.write_topic_and_expect_zero, "step", Step(current_sim_time), profiler=profiler
+                    )
                     await loop.run_in_executor(executor, f)
 
                 with profiler.prof("get_ui_image"):
-                    f = P(sim_ci.write_topic_and_expect, "get_ui_image", None, expect="ui_image")
+                    f = P(
+                        sim_ci.write_topic_and_expect,
+                        "get_ui_image",
+                        None,
+                        expect="ui_image",
+                        profiler=profiler,
+                    )
                     r_ui_image: MsgReceived[JPGImage] = await loop.run_in_executor(executor, f)
 
             if webserver:
@@ -670,11 +738,11 @@ async def run_episode(
             # log_timing_info(tt, sim_ci)
             # TODO: re-implement
 
-            if steps % 20 == 0:
+            if steps % 100 == 0:
                 with profiler.prof("gc"):
                     gc.collect()
-
-                logger.info(f"stats: " + profiler.show_stats(("root", "run_episode", "iteration")))
+            if steps % 20 == 0:
+                logger.info(f"stats: \n" + profiler.show_stats(("root", "run_episode", "iteration")))
                 # logger.info(f'stats2: {profiler.stats}')
 
     return current_sim_time
