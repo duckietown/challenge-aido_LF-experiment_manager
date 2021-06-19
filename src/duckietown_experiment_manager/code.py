@@ -23,9 +23,9 @@ import duckietown_challenges as dc
 from aido_analyze.utils_drawing import read_and_draw
 from aido_analyze.utils_video import make_video2, make_video_ui_image
 from aido_schemas import (
-    DB20Observations,
     DB20ObservationsOnlyState,
     DB20ObservationsPlusState,
+    DB20ObservationsWithTimestamp,
     DTSimStateDump,
     DumpState,
     EpisodeStart,
@@ -34,9 +34,9 @@ from aido_schemas import (
     GetRobotObservations,
     GetRobotState,
     JPGImage,
-    protocol_agent_DB20,
     protocol_agent_DB20_fullstate,
     protocol_agent_DB20_onlystate,
+    protocol_agent_DB20_timestamps,
     PROTOCOL_FULL,
     PROTOCOL_NORMAL,
     protocol_scenario_maker,
@@ -101,6 +101,8 @@ class MyConfig:
     scenarios: List[str]
 
     do_webserver: bool = True
+
+    max_workers: int = 3
 
 
 def list_all_files(wd: str) -> List[str]:
@@ -220,7 +222,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                 elif p == PROTOCOL_STATE:
                     expect_protocol = protocol_agent_DB20_onlystate
                 elif p == PROTOCOL_NORMAL:
-                    expect_protocol = protocol_agent_DB20
+                    expect_protocol = protocol_agent_DB20_timestamps
                 else:
                     raise NotImplementedError(p)
                 # first open all fifos
@@ -363,7 +365,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
             banner_bottom_fn = f"/tmp/{episode_name}.png"
             get_banner_bottom(banner_bottom_fn)
 
-            with ProcessPoolExecutor(max_workers=1) as executor:
+            with ProcessPoolExecutor(max_workers=config.max_workers) as executor:
                 output_video = os.path.join(dn, "ui_image.mp4")
                 output_gif = os.path.join(dn, "ui_image.gif")
                 executor.submit(ui_image_bg, fn=fn, output_video=output_video, output_gif=output_gif)
@@ -648,7 +650,7 @@ async def run_episode(
                                     recv_observations: MsgReceived[RobotObservations]
                                     recv_observations = await loop.run_in_executor(executor, f)
                                     ro: RobotObservations = recv_observations.data
-                                    obs = cast(DB20Observations, ro.observations)
+                                    obs = cast(DB20ObservationsWithTimestamp, ro.observations)
                                     if webserver:
                                         await webserver.push(f"{agent_name}-camera", obs.camera.jpg_data)
                                 elif pr == PROTOCOL_STATE:
@@ -667,7 +669,9 @@ async def run_episode(
                                     map_data=map_data,
                                 )
                             elif pr == PROTOCOL_NORMAL:
-                                obs_plus = DB20Observations(camera=obs.camera, odometry=obs.odometry)
+                                obs_plus = DB20ObservationsWithTimestamp(
+                                    camera=obs.camera, odometry=obs.odometry
+                                )
                             elif pr == PROTOCOL_STATE:
                                 obs_plus = DB20ObservationsOnlyState(
                                     your_name=agent_name,
