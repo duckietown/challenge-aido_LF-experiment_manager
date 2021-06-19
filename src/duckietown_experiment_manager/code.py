@@ -5,8 +5,10 @@ import logging
 import os
 import shutil
 import subprocess
+import time
 import traceback
 from concurrent.futures.thread import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass
 from tempfile import NamedTemporaryFile
 from typing import cast, Dict, Iterator, List, Optional, Set
@@ -67,8 +69,7 @@ from duckietown_challenges import (
     InvalidSubmission,
     json,
 )
-from duckietown_world.rules import RuleEvaluationResult
-from duckietown_world.rules.rule import EvaluatedMetric
+from duckietown_world.rules import EvaluatedMetric, RuleEvaluationResult
 from zuper_nodes import RemoteNodeAborted
 from zuper_nodes_wrapper.struct import MsgReceived
 from zuper_nodes_wrapper.wrapper_outside import ComponentInterface
@@ -103,6 +104,14 @@ class MyConfig:
     scenarios: List[str]
 
     do_webserver: bool = True
+
+
+@contextmanager
+def show_time(s: str):
+    t0 = time.time()
+    yield
+    dt = time.time() - t0
+    logger.debug(f"timer: {dt:.3f} for {s}")
 
 
 def list_all_files(wd: str) -> List[str]:
@@ -330,15 +339,16 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
             logger.info(f"Now running episode {episode_name}")
 
             try:
-                length_s = await run_episode(
-                    sim_ci,
-                    agents_cis,
-                    episode_name=episode_name,
-                    scenario=episode_spec.scenario,
-                    config=config,
-                    physics_dt=config.physics_dt,
-                    webserver=webserver,
-                )
+                with show_time(f"run_episode"):
+                    length_s = await run_episode(
+                        sim_ci,
+                        agents_cis,
+                        episode_name=episode_name,
+                        scenario=episode_spec.scenario,
+                        config=config,
+                        physics_dt=config.physics_dt,
+                        webserver=webserver,
+                    )
                 logger.info(f"Finished episode {episode_name} with length {length_s:.2f}")
 
             except:
@@ -365,22 +375,12 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
 
                     get_banner_bottom(banner_bottom_fn)
                     for pc_name in episode_spec.scenario.player_robots:
+                        protocol = episode_spec.scenario.robots[pc_name].protocol
+
                         dn_i = os.path.join(dn, pc_name)
                         with notice_thread("Visualization", 2):
-                            evaluated = read_and_draw(fn, dn_i, pc_name)
-
-                        out_video = os.path.join(dn_i, "camera.mp4")
-                        out_gif = os.path.join(dn_i, "camera.gif")
-                        with notice_thread("Make video", 2):
-                            # make_video1(log_filename=fn, output_video=out_video, robot_name=pc_name)
-                            make_video2(
-                                log_filename=fn,
-                                output_video=out_video,
-                                robot_name=pc_name,
-                                banner_image="banner1.png",
-                                banner_image_bottom=banner_bottom_fn,
-                            )
-                            subprocess.check_call(["./makegif.sh", out_video, out_gif])
+                            with show_time(f"visualization-{pc_name}"):
+                                evaluated = read_and_draw(fn, dn_i, pc_name)
 
                         if len(evaluated) == 0:
                             msg = "Empty evaluated"
@@ -399,6 +399,21 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
                                 stats[M] = float(em.total)
                         per_episode[episode_name + "-" + pc_name] = stats
                         logger.debug(episode_name=episode_name, pc_name=pc_name, stats=stats)
+
+                        if protocol in (PROTOCOL_FULL, PROTOCOL_NORMAL):
+                            out_video = os.path.join(dn_i, "camera.mp4")
+                            out_gif = os.path.join(dn_i, "camera.gif")
+                            with show_time(f"video-{pc_name}"):
+                                with notice_thread("Make video", 2):
+                                    # make_video1(log_filename=fn, output_video=out_video, robot_name=pc_name)
+                                    make_video2(
+                                        log_filename=fn,
+                                        output_video=out_video,
+                                        robot_name=pc_name,
+                                        banner_image="banner1.png",
+                                        banner_image_bottom=banner_bottom_fn,
+                                    )
+                                    subprocess.check_call(["./makegif.sh", out_video, out_gif])
 
             if length_s >= config.min_episode_length_s:
                 logger.info(f"{length_s:.1f} s are enough")
@@ -625,8 +640,8 @@ async def run_episode(
                                 get_commands,
                                 expect="commands",
                             )
-                            r: MsgReceived = await loop.run_in_executor(executor, f)
-
+                            with show_time(f"get_commands-{agent_name}"):
+                                r: MsgReceived = await loop.run_in_executor(executor, f)
                         except BaseException as e:
                             msg = "Trouble with communication to the agent."
                             raise dc.InvalidSubmission(msg) from e
@@ -638,16 +653,19 @@ async def run_episode(
                             "set_robot_commands",
                             set_robot_commands,
                         )
-                        await loop.run_in_executor(executor, f)
+                        with show_time(f"set_robot_commands-{agent_name}"):
+                            await loop.run_in_executor(executor, f)
 
                 with tt.measure("step_physics"):
                     current_sim_time += physics_dt
                     f = P(sim_ci.write_topic_and_expect_zero, "step", Step(current_sim_time))
-                    await loop.run_in_executor(executor, f)
+                    with show_time(f"step_physics"):
+                        await loop.run_in_executor(executor, f)
 
                 with tt.measure("get_ui_image"):
                     f = P(sim_ci.write_topic_and_expect, "get_ui_image", None, expect="ui_image")
-                    r_ui_image: MsgReceived[JPGImage] = await loop.run_in_executor(executor, f)
+                    with show_time(f"get_ui_image"):
+                        r_ui_image: MsgReceived[JPGImage] = await loop.run_in_executor(executor, f)
 
             if webserver:
                 await webserver.push("ui_image", r_ui_image.data.jpg_data)

@@ -15,11 +15,11 @@ RUN ffmpeg -version
 RUN pip3 install -U "pip>=20.2"
 
 COPY requirements.pin.txt ./
-RUN pip3 install --use-feature=2020-resolver -r requirements.pin.txt
+RUN pip3 install  -r requirements.pin.txt
 
 COPY requirements.* ./
 RUN cat requirements.* > .requirements.txt
-RUN pip3 install --use-feature=2020-resolver -r .requirements.txt
+RUN pip3 install  -r .requirements.txt
 RUN pip3 uninstall -y dataclasses
 RUN pip3 list
 RUN pipdeptree
