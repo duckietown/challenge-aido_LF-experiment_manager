@@ -66,7 +66,7 @@ from duckietown_challenges import (
     json,
 )
 from duckietown_world.rules import EvaluatedMetric, RuleEvaluationResult
-from zuper_nodes import RemoteNodeAborted
+from zuper_nodes import ExternalProtocolViolation, RemoteNodeAborted
 from zuper_nodes_wrapper import Profiler, ProfilerImp
 from zuper_nodes_wrapper.struct import MsgReceived
 from zuper_nodes_wrapper.wrapper_outside import ComponentInterface
@@ -413,6 +413,10 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         raise
     except dc.AbortedByServer:
         raise
+    except ExternalProtocolViolation as e:  # FIXME: we should distinguish the source
+        msg = "external protocol violation"
+        logger.error(msg, e=traceback.format_exc())
+        raise dc.InvalidSubmission(msg) from e
     except BaseException as e:
         msg = "Anomalous error while running episodes:"
         logger.error(msg, e=traceback.format_exc())
