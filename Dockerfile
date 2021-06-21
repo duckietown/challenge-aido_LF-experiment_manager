@@ -1,5 +1,10 @@
+ARG ARCH=amd64
+ARG MAJOR=daffy
+ARG BASE_TAG=${MAJOR}-${ARCH}
+
 ARG AIDO_REGISTRY
-FROM ${AIDO_REGISTRY}/duckietown/aido-base-python3:daffy-amd64
+FROM ${AIDO_REGISTRY}/duckietown/aido-base-python3:${BASE_TAG}
+
 
 ARG PIP_INDEX_URL="https://pypi.org/simple"
 ENV PIP_INDEX_URL=${PIP_INDEX_URL}
@@ -12,24 +17,24 @@ RUN cp ./ffmpeg /usr/bin/ffmpeg
 RUN which ffmpeg
 RUN ffmpeg -version
 
-RUN pip3 install -U "pip>=20.2"
+RUN python3 -m pip install -U "pip>=20.2"
 
 COPY requirements.pin.txt ./
-RUN pip3 install  -r requirements.pin.txt
+RUN python3 -m pip install  -r requirements.pin.txt
 
 COPY requirements.* ./
 RUN cat requirements.* > .requirements.txt
-RUN pip3 install  -r .requirements.txt
-RUN pip3 uninstall -y dataclasses
-RUN pip3 list
+RUN python3 -m pip install  -r .requirements.txt
+RUN python3 -m pip uninstall -y dataclasses
+RUN python3 -m pip list
 RUN pipdeptree
 
 
 
 COPY . .
 
-RUN pip install . --no-deps
-RUN pip3 list
+RUN python3 -m pip install . --no-deps
+RUN python3 -m pip list
 
 RUN dt-experiment-manager --help
 RUN ls -al *png
