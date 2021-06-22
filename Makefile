@@ -1,11 +1,7 @@
 
 
 build:
-	dts build_utils aido-container-build --use-branch daffy --ignore-untagged --ignore-dirty
-
-
-push: build
-	dts build_utils aido-container-push  --use-branch daffy
+	dts build_utils aido-container-build --use-branch daffy --ignore-untagged --ignore-dirty --push
 
 upload: # v3
 	dts build_utils check-not-dirty
