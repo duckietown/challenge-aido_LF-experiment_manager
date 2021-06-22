@@ -65,6 +65,7 @@ from duckietown_challenges import (
     InvalidSubmission,
     json,
 )
+from duckietown_world import Tile
 from duckietown_world.rules import EvaluatedMetric, RuleEvaluationResult
 from zuper_nodes import ExternalProtocolViolation, RemoteNodeAborted
 from zuper_nodes_wrapper import Profiler, ProfilerImp
@@ -452,6 +453,7 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
 
 def robot_stats(fn, dn_i, pc_name):
     with notice_thread(f"Visualization {pc_name}", 2):
+        Tile.style = "synthetic"
         evaluated = read_and_draw(fn, dn_i, pc_name)
 
     if len(evaluated) == 0:
