@@ -17,7 +17,6 @@ RUN cp ./ffmpeg /usr/bin/ffmpeg
 RUN which ffmpeg
 RUN ffmpeg -version
 
-RUN python3 -m pip install -U "pip>=20.2"
 
 COPY requirements.pin.txt ./
 RUN python3 -m pip install  -r requirements.pin.txt
