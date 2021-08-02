@@ -6,9 +6,9 @@ import os
 import time
 import traceback
 
+import duckietown_challenges as dc
 from zuper_nodes import RemoteNodeAborted
 
-import duckietown_challenges as dc
 from .code import main
 
 P = functools.partial
