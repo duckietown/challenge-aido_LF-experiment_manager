@@ -2,8 +2,8 @@ ARG ARCH=amd64
 ARG MAJOR=daffy
 ARG BASE_TAG=${MAJOR}-${ARCH}
 
-ARG AIDO_REGISTRY
-FROM ${AIDO_REGISTRY}/duckietown/aido-base-python3:${BASE_TAG}
+ARG DOCKER_REGISTRY
+FROM ${DOCKER_REGISTRY}/duckietown/aido-base-python3:${BASE_TAG}
 
 
 ARG PIP_INDEX_URL="https://pypi.org/simple"
