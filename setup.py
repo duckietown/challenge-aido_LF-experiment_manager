@@ -31,6 +31,8 @@ install_requires = [
     "zuper-nodes-z6",
     "zuper-ipce-z6",
     "zuper-typing-z6",
+    "zuper-commons-z6",
+    "opencv-python",
     "numpy",
     "PyYAML",
     f"aido-protocols-{line}",
