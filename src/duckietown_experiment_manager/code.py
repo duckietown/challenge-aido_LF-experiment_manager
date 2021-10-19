@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import traceback
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass
 from typing import cast, Dict, Iterator, List, Optional, Set
 
@@ -420,6 +421,9 @@ async def main(cie: ChallengeInterfaceEvaluator, log_dir: str, attempts: str):
         msg = "external protocol violation"
         logger.error(msg, e=traceback.format_exc())
         raise dc.InvalidSubmission(msg) from e
+    except BrokenProcessPool as e:
+        msg = "broken process pool"
+        raise dc.InvalidEnvironment(msg) from e
     except BaseException as e:
         msg = "Anomalous error while running episodes:"
         logger.error(msg, e=traceback.format_exc())
