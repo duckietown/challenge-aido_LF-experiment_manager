@@ -10,8 +10,9 @@ ARG PIP_INDEX_URL="https://pypi.org/simple"
 ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 RUN echo PIP_INDEX_URL=${PIP_INDEX_URL}
 
-
-RUN wget -q https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz && \
+ARG TARGETPLATFORM
+RUN echo TARGETPLATFORM=${TARGETPLATFORM}
+RUN wget -q https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-${TARGETPLATFORM}-static.tar.xz && \
     tar xvf ffmpeg-git-amd64-static.tar.xz --strip-components=1
 RUN cp ./ffmpeg /usr/bin/ffmpeg
 RUN which ffmpeg
