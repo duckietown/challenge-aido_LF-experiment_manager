@@ -10,10 +10,10 @@ ARG PIP_INDEX_URL="https://pypi.org/simple"
 ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 RUN echo PIP_INDEX_URL=${PIP_INDEX_URL}
 
-ARG TARGETPLATFORM
-RUN echo TARGETPLATFORM=${TARGETPLATFORM}
-RUN wget -q https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-${TARGETPLATFORM}-static.tar.xz && \
-    tar xvf ffmpeg-git-${TARGETPLATFORM}-static.tar.xz --strip-components=1
+ARG TARGETARCH
+RUN echo TARGETARCH=${TARGETARCH}
+RUN wget -q https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-${TARGETARCH}-static.tar.xz && \
+    tar xvf ffmpeg-git-${TARGETARCH}-static.tar.xz --strip-components=1
 RUN cp ./ffmpeg /usr/bin/ffmpeg
 RUN which ffmpeg
 RUN ffmpeg -version
