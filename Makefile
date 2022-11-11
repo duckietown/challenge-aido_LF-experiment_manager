@@ -1,18 +1,14 @@
 
 
+B=dts build_utils
+B=dt-build_utils-cli
+
+
 build:
-	dts build_utils aido-container-build --use-branch daffy --ignore-untagged --ignore-dirty --push
-
-upload: # v3
-	dts build_utils check-not-dirty
-	dts build_utils check-tagged
-	dts build_utils check-need-upload --package duckietown-gym-daffy make upload-do
-
-upload-do:
-	rm -rf src/*.egg-info
-	python3 setup.py sdist
-	twine upload --skip-existing --verbose dist/*
-
+	$(B) aido-container-build --use-branch daffy \
+		--use-org duckietown-infrastructure \
+		--push  --ignore-untagged --ignore-dirty  \
+		--buildx --platforms linux/amd64,linux/arm64
 
 upload: # v3
 	dts build_utils check-not-dirty
