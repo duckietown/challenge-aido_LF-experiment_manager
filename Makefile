@@ -10,12 +10,8 @@ build:
 		--push  --ignore-untagged --ignore-dirty  \
 		--buildx --platforms linux/amd64,linux/arm64
 
-upload: # v3
-	dts build_utils check-not-dirty
-	dts build_utils check-tagged
-	dts build_utils check-need-upload --package duckietown-experiment-manager-daffy make upload-do
 
-upload-do:
+upload:
 	rm -f dist/*
 	rm -rf src/*.egg-info
 	python3 setup.py sdist
