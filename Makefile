@@ -1,14 +1,9 @@
 
 
-B=dts build_utils
-B=dt-build_utils-cli
 
 
 build:
-	$(B) aido-container-build --use-branch daffy \
-		--use-org duckietown-infrastructure \
-		--push  --ignore-untagged --ignore-dirty  \
-		--buildx --platforms linux/amd64,linux/arm64
+	dt-build_utils-cli aido-container-build --use-branch daffy --ignore-dirty --ignore-untagged --push --buildx --platforms linux/amd64,linux/arm64
 
 
 upload:
