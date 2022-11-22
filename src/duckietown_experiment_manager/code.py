@@ -537,6 +537,8 @@ async def run_episode(
                 owned_by_player=robot_name in scenario.player_robots,
                 color=robot_conf.color,
                 simulate_camera=simulate_camera,
+                dynamics=robot_conf.dynamics,
+                dynamics_params=robot_conf.dynamics_params,
             )
             sim_ci.write_topic_and_expect_zero("spawn_robot", sp, profiler=profiler)
         for duckie_name, duckie_config in scenario.duckies.items():
