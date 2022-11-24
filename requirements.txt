@@ -8,8 +8,4 @@ zuper-nodes-z6
 zuper-ipce-z6
 zuper-commons-z6
 # those are needed later anyway, we optimize a bit
-#
-# beautifulsoup4 # opt
-# compmake-z6 # opt
 procgraph-z6>=6.1.0
-# PyGeometry-z6
